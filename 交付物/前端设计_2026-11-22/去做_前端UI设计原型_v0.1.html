@@ -1,0 +1,1540 @@
+<!doctype html>
+<html lang="zh-CN" data-ipw-template="qu-app" data-ipw-style="editorial-tool">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>去做 · 我记住，我安排</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./design-tokens.css">
+<style>
+:root{
+  --canvas:#F4F3EE;
+  --canvas-2:#EDEBE4;
+  --surface:#FFFFFF;
+  --surface-2:#FAF9F5;
+  --ink:#15160F;
+  --ink-2:#3A3C31;
+  --muted:#6D6F63;
+  --faint:#93958A;
+  --line:#E2E0D6;
+  --line-strong:#D2CFC2;
+  --accent:#1F4D3F;
+  --accent-2:#2F6A57;
+  --accent-soft:#E8F0EA;
+  --amber:#9A6A15;
+  --amber-soft:#F7EEDC;
+  --danger:#9C3B2E;
+  --danger-soft:#F8E9E5;
+  --radius-lg:20px;
+  --radius:14px;
+  --radius-sm:10px;
+  --shadow-sm:0 1px 2px rgba(21,22,15,.05), 0 1px 0 rgba(21,22,15,.03);
+  --shadow:0 10px 30px -18px rgba(21,22,15,.28);
+  --shadow-lg:0 30px 70px -40px rgba(21,22,15,.45);
+  --sans:'Plus Jakarta Sans','PingFang SC','Hiragino Sans GB','Microsoft YaHei',system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  --ease:cubic-bezier(.32,.72,0,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--canvas);color:var(--ink);font-family:var(--sans);
+  font-size:14.5px;line-height:1.55;letter-spacing:.005em;
+  -webkit-font-smoothing:antialiased;overflow:hidden;
+}
+button,input,select,textarea{font:inherit;color:inherit}
+::selection{background:rgba(31,77,63,.16)}
+h1,h2,h3,h4,p{margin:0}
+a{color:var(--accent);text-decoration:none}
+.mono{font-family:var(--mono);font-size:12px;letter-spacing:.02em}
+
+/* ========== 应用外壳 ========== */
+.app{display:grid;grid-template-columns:256px minmax(0,1fr);height:100vh;height:100dvh}
+.sidebar{
+  display:flex;flex-direction:column;gap:6px;padding:20px 16px 16px;
+  background:linear-gradient(180deg,#F7F6F1 0%,#F1F0E9 100%);
+  border-right:1px solid var(--line);
+}
+.brand{display:flex;align-items:center;gap:10px;padding:6px 8px 18px}
+.brand-mark{
+  width:34px;height:34px;border-radius:11px;display:grid;place-items:center;
+  background:var(--accent);color:#F6F5EF;font-weight:800;font-size:15px;
+  box-shadow:0 6px 16px -8px rgba(31,77,63,.7), inset 0 1px 0 rgba(255,255,255,.22);
+}
+.brand-name{font-weight:700;font-size:16px;letter-spacing:.06em}
+.brand-sub{font-size:11px;color:var(--faint);letter-spacing:.14em;text-transform:uppercase}
+.nav-label{font-size:11px;color:var(--faint);letter-spacing:.12em;padding:10px 10px 6px;text-transform:uppercase}
+.nav-item{
+  display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+  padding:10px 11px;border-radius:12px;border:1px solid transparent;background:none;
+  color:var(--ink-2);font-size:14px;cursor:pointer;transition:background .18s var(--ease),color .18s var(--ease);
+}
+.nav-item:hover{background:rgba(255,255,255,.7)}
+.nav-item .dot{width:7px;height:7px;border-radius:50%;background:var(--line-strong);flex:none}
+.nav-item .count{margin-left:auto;font-size:11.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+.nav-item.active{background:var(--surface);border-color:var(--line);color:var(--ink);box-shadow:var(--shadow-sm);font-weight:600}
+.nav-item.active .dot{background:var(--accent)}
+.sidebar-foot{margin-top:auto;display:grid;gap:10px}
+.trial{
+  border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:12px 13px;box-shadow:var(--shadow-sm);
+}
+.trial-top{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--muted)}
+.trial-days{font-family:var(--mono);font-size:19px;color:var(--accent);font-weight:500;line-height:1.2}
+.bar{height:4px;border-radius:99px;background:var(--canvas-2);overflow:hidden;margin-top:8px}
+.bar > i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.account{display:flex;align-items:center;gap:9px;padding:8px;border-radius:12px;cursor:pointer}
+.account:hover{background:rgba(255,255,255,.7)}
+.avatar{width:28px;height:28px;border-radius:9px;background:#DCD8C8;display:grid;place-items:center;font-size:12px;font-weight:700;color:#4C4A3A}
+.account-name{font-size:13px;font-weight:600}
+.account-sub{font-size:11px;color:var(--faint)}
+
+/* ========== 主区 ========== */
+.main{overflow-y:auto;overflow-x:hidden;background:var(--canvas);position:relative}
+.screen{display:none;min-height:100%}
+.screen.active{display:block;animation:rise .34s var(--ease) both}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.pad{padding:26px clamp(20px,3.4vw,44px) 60px}
+.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:6px}
+.eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+h1.title{font-size:26px;letter-spacing:-.02em;font-weight:700}
+.sub{color:var(--muted);font-size:13.5px;margin-top:6px;max-width:56ch}
+.hairline{height:1px;background:var(--line);margin:20px 0}
+
+/* ========== 按钮 ========== */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:9px 15px;border-radius:10px;border:1px solid var(--line-strong);
+  background:var(--surface);color:var(--ink);font-size:13.5px;font-weight:600;
+  cursor:pointer;transition:transform .16s var(--ease),box-shadow .16s var(--ease),background .16s var(--ease);
+  box-shadow:var(--shadow-sm);
+}
+.btn:hover{background:var(--surface-2);transform:translateY(-1px)}
+.btn:active{transform:none}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#F7F6F0;box-shadow:0 8px 20px -12px rgba(31,77,63,.9)}
+.btn.primary:hover{background:var(--accent-2)}
+.btn.quiet{background:transparent;border-color:transparent;box-shadow:none;color:var(--muted)}
+.btn.quiet:hover{background:rgba(21,22,15,.045);color:var(--ink)}
+.btn.sm{padding:6px 11px;font-size:12.5px;border-radius:9px}
+.btn.danger{color:var(--danger);border-color:#E7D3CD;background:var(--danger-soft)}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.spacer{flex:1}
+
+/* ========== 搜索与筛选 ========== */
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:18px 0 16px}
+.search{
+  display:flex;align-items:center;gap:9px;flex:1 1 280px;max-width:420px;
+  padding:9px 13px;border:1px solid var(--line);border-radius:11px;background:var(--surface);
+  box-shadow:var(--shadow-sm);transition:border-color .18s,box-shadow .18s;
+}
+.search:focus-within{border-color:var(--accent-2);box-shadow:0 0 0 3px rgba(31,77,63,.1)}
+.search input{flex:1;border:0;outline:0;background:none;font-size:13.5px}
+.search .kbd{font-family:var(--mono);font-size:10.5px;color:var(--faint);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+.chips{display:flex;gap:7px;flex-wrap:wrap}
+.chip{
+  padding:6px 12px;border-radius:99px;border:1px solid var(--line);background:var(--surface);
+  font-size:12.5px;color:var(--ink-2);cursor:pointer;transition:all .16s var(--ease);
+}
+.chip:hover{border-color:var(--line-strong)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#F7F6F0}
+.chip .n{opacity:.6;font-size:11px;margin-left:4px;font-variant-numeric:tabular-nums}
+
+/* ========== 材料卡 ========== */
+.grid-materials{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:14px}
+.mat{
+  position:relative;display:flex;flex-direction:column;gap:9px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:15px 16px 13px;box-shadow:var(--shadow-sm);transition:transform .2s var(--ease),box-shadow .2s var(--ease),border-color .2s;
+  cursor:pointer;
+}
+.mat:hover{transform:translateY(-2px);box-shadow:var(--shadow);border-color:var(--line-strong)}
+.mat.picked{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent), var(--shadow)}
+.mat-top{display:flex;align-items:flex-start;gap:10px}
+.check{
+  width:18px;height:18px;border-radius:6px;border:1.5px solid var(--line-strong);background:var(--surface);
+  flex:none;margin-top:2px;display:grid;place-items:center;transition:all .16s var(--ease);
+}
+.mat.picked .check{background:var(--accent);border-color:var(--accent)}
+.mat.picked .check::after{content:'';width:9px;height:5px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translateY(-1px)}
+.mat-title{font-size:14.5px;font-weight:650;letter-spacing:-.005em;line-height:1.4}
+.mat-excerpt{color:var(--under,var(--muted));font-size:12.5px;line-height:1.62;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mat-foot{display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:9px;border-top:1px dashed var(--line);font-size:11.5px;color:var(--faint);flex-wrap:wrap}
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.01em}
+.badge.topic{background:var(--accent-soft);color:var(--accent)}
+.badge.kind{background:var(--canvas-2);color:var(--ink-2)}
+.badge.warn{background:var(--amber-soft);color:var(--amber)}
+.badge.bad{background:var(--danger-soft);color:var(--danger)}
+.badge.ok{background:var(--accent-soft);color:var(--accent)}
+.badge.ghost{background:transparent;border:1px solid var(--line);color:var(--muted)}
+.meta-dot{width:3px;height:3px;border-radius:50%;background:var(--line-strong)}
+
+/* 选中悬浮条 */
+.selectbar{
+  position:sticky;bottom:16px;margin:22px auto 0;width:max-content;max-width:100%;
+  display:flex;align-items:center;gap:14px;padding:10px 12px 10px 18px;
+  background:rgba(21,22,15,.92);color:#F4F3EE;border-radius:14px;
+  box-shadow:var(--shadow-lg);backdrop-filter:blur(10px);
+  transform:translateY(140%);opacity:0;transition:transform .3s var(--ease),opacity .3s;
+}
+.selectbar.show{transform:none;opacity:1}
+.selectbar b{font-weight:700}
+.selectbar .btn{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.18);color:#F4F3EE;box-shadow:none}
+.selectbar .btn.primary{background:#F4F3EE;color:#15160F;border-color:transparent}
+
+/* ========== 抽屉 ========== */
+.scrim{position:fixed;inset:0;background:rgba(21,22,15,.32);opacity:0;pointer-events:none;transition:opacity .26s;z-index:60;backdrop-filter:blur(2px)}
+.scrim.show{opacity:1;pointer-events:auto}
+.drawer{
+  position:fixed;top:0;right:0;bottom:0;width:min(560px,100%);background:var(--surface);
+  border-left:1px solid var(--line);z-index:61;display:flex;flex-direction:column;
+  transform:translateX(102%);transition:transform .32s var(--ease);box-shadow:var(--shadow-lg);
+}
+.drawer.show{transform:none}
+.drawer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:20px 22px 14px;border-bottom:1px solid var(--line)}
+.drawer-body{padding:18px 22px;overflow-y:auto;display:grid;gap:16px}
+.drawer-foot{padding:14px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;background:var(--surface-2)}
+.field{display:grid;gap:6px}
+.field > label{font-size:12px;font-weight:600;color:var(--ink-2);letter-spacing:.02em}
+.field .hint{font-size:11.5px;color:var(--faint);font-weight:400}
+.input,.textarea,.select{
+  width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);
+  outline:0;font-size:13.5px;transition:border-color .16s,box-shadow .16s;
+}
+.input:focus,.textarea:focus,.select:focus{border-color:var(--accent-2);box-shadow:0 0 0 3px rgba(31,77,63,.1);background:#fff}
+.textarea{min-height:104px;resize:vertical;line-height:1.62;font-family:var(--mono);font-size:12.5px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.segment{display:flex;gap:4px;padding:3px;background:var(--canvas-2);border-radius:10px}
+.segment button{flex:1;padding:6px 8px;border:0;background:none;border-radius:8px;font-size:12.5px;color:var(--muted);cursor:pointer}
+.segment button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-sm);font-weight:600}
+.dropzone{
+  border:1.5px dashed var(--line-strong);border-radius:12px;padding:18px;text-align:center;
+  background:repeating-linear-gradient(135deg,#FBFAF6,#FBFAF6 9px,#F5F4EE 9px,#F5F4EE 18px);
+}
+.dropzone b{display:block;font-size:13px}
+.md{
+  background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+  font-size:12.5px;line-height:1.7;max-height:180px;overflow:auto;color:var(--ink-2);
+}
+.md h4{font-size:13px;margin:8px 0 4px}
+.md li{margin-left:-12px}
+.toast{
+  position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);z-index:90;
+  background:var(--ink);color:#F4F3EE;padding:10px 18px;border-radius:11px;font-size:13px;
+  opacity:0;pointer-events:none;transition:all .26s var(--ease);box-shadow:var(--shadow-lg);
+}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+/* ========== 登录屏 ========== */
+.auth{display:grid;grid-template-columns:1.05fr .95fr;height:100vh;height:100dvh}
+.auth-left{
+  padding:48px clamp(28px,4.5vw,64px);display:flex;flex-direction:column;gap:22px;
+  background:
+    radial-gradient(1200px 600px at 8% -10%, #E6EDE7 0%, transparent 62%),
+    radial-gradient(900px 500px at 92% 108%, #F0E7D6 0%, transparent 60%),
+    var(--canvas);
+  border-right:1px solid var(--line);
+}
+.auth-left .brand{padding:0}
+.auth-quote{font-size:clamp(26px,3.1vw,38px);line-height:1.28;letter-spacing:-.025em;font-weight:700;max-width:19ch;margin-top:auto}
+.auth-quote em{font-style:normal;color:var(--accent);position:relative}
+.auth-quote em::after{content:'';position:absolute;left:0;right:0;bottom:2px;height:7px;background:var(--accent-soft);z-index:-1}
+.auth-points{display:grid;gap:10px;margin-top:18px}
+.auth-point{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--ink-2)}
+.auth-point i{width:18px;height:18px;border-radius:6px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-style:normal;font-size:11px;font-weight:700;flex:none;margin-top:1px}
+.auth-right{display:grid;place-items:center;padding:40px 24px;background:var(--surface)}
+.auth-card{width:min(410px,100%);display:grid;gap:18px}
+.auth-tabs{display:flex;gap:20px;border-bottom:1px solid var(--line)}
+.auth-tabs button{padding:0 0 10px;border:0;background:none;font-size:14px;color:var(--muted);cursor:pointer;position:relative}
+.auth-tabs button.on{color:var(--ink);font-weight:650}
+.auth-tabs button.on::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--accent)}
+.trial-note{margin-top:6px;padding:10px 12px;border:1px dashed var(--line-strong);border-radius:10px;font-size:12px;color:var(--muted);background:var(--surface-2);display:flex;gap:8px}
+.trial-note b{color:var(--accent);font-weight:650}
+
+/* ========== 安排页（对话 + 结果） ========== */
+.workbench{display:grid;grid-template-columns:minmax(0,1fr) minmax(360px,440px);height:100vh;height:100dvh}
+.stream{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--line);background:var(--canvas)}
+.stream-head{padding:18px clamp(18px,2.4vw,30px) 12px;border-bottom:1px solid var(--line);background:rgba(244,243,238,.86);backdrop-filter:blur(8px);position:sticky;top:0;z-index:5}
+.steps{display:flex;align-items:center;gap:6px;margin-top:12px;flex-wrap:wrap}
+.step{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--faint);padding:3px 9px 3px 7px;border-radius:99px;border:1px solid transparent}
+.step .n{width:16px;height:16px;border-radius:50%;border:1px solid var(--line-strong);display:grid;place-items:center;font-size:10px;font-family:var(--mono)}
+.step.done{color:var(--accent)}
+.step.done .n{background:var(--accent);border-color:var(--accent);color:#fff}
+.step.now{color:var(--ink);background:var(--surface);border-color:var(--line);box-shadow:var(--shadow-sm)}
+.step.now .n{border-color:var(--accent);color:var(--accent)}
+.step-sep{width:14px;height:1px;background:var(--line-strong)}
+.thread{flex:1;overflow-y:auto;padding:22px clamp(18px,2.4vw,30px) 140px;display:grid;gap:18px;align-content:start}
+.msg-user{justify-self:end;max-width:min(520px,86%);background:var(--accent);color:#F6F5EF;border-radius:16px 16px 4px 16px;padding:13px 16px;box-shadow:0 12px 26px -20px rgba(31,77,63,.9)}
+.msg-user .q{font-size:14px;line-height:1.6;font-weight:500}
+.msg-user .conds{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.msg-user .conds span{background:rgba(255,255,255,.16);border-radius:6px;padding:2px 8px;font-size:11px;letter-spacing:.02em}
+.role{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase;margin-bottom:7px}
+.role .ai{width:18px;height:18px;border-radius:6px;background:var(--accent);color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700}
+.acard{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:15px 16px;box-shadow:var(--shadow-sm);max-width:min(660px,100%)}
+.acard h5{font-size:13.5px;font-weight:650;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+.acard h5 .badge{font-weight:600}
+.cand{display:flex;align-items:flex-start;gap:10px;padding:10px;border:1px solid var(--line);border-radius:11px;background:var(--surface-2);margin-bottom:8px}
+.cand:last-of-type{margin-bottom:0}
+.cand .t{font-size:13px;font-weight:600}
+.cand .r{font-size:11.5px;color:var(--muted);margin-top:3px}
+.cand .r b{color:var(--accent-2);font-weight:600}
+.cand.off{opacity:.5}
+.switch{width:32px;height:18px;border-radius:99px;background:var(--line-strong);position:relative;flex:none;cursor:pointer;transition:background .18s;margin-top:2px}
+.switch::after{content:'';position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .18s var(--ease);box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.switch.on{background:var(--accent)}
+.switch.on::after{transform:translateX(14px)}
+.skel{height:9px;border-radius:99px;background:linear-gradient(90deg,var(--canvas-2) 0%,#F6F5F0 50%,var(--canvas-2) 100%);background-size:200% 100%;animation:shimmer 1.4s infinite}
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+.notice{display:flex;gap:9px;padding:10px 12px;border-radius:10px;font-size:12.5px;line-height:1.55;border:1px solid}
+.notice.warn{background:var(--amber-soft);border-color:#EBD9B6;color:#6E4C10}
+.notice.ok{background:var(--accent-soft);border-color:#CFE0D5;color:#1B4738}
+.notice.bad{background:var(--danger-soft);border-color:#EFD6D0;color:#7C2E23}
+.notice i{font-style:normal;font-weight:700;flex:none}
+
+/* 空状态 */
+.empty{display:none;place-items:center;text-align:center;gap:9px;padding:44px 20px;border:1px dashed var(--line-strong);border-radius:var(--radius);background:var(--surface)}
+.empty .empty-ic{font-size:20px;color:var(--faint)}
+.empty b{font-size:14.5px}
+.empty p{font-size:12.5px;color:var(--muted);line-height:1.65;max-width:44ch;margin:0}
+
+/* 卡片操作与浮层菜单 */
+.grid-materials .mat{position:relative}
+.mat-more{position:absolute;right:9px;top:9px;width:22px;height:22px;border-radius:6px;border:1px solid transparent;background:transparent;color:var(--faint);font-size:13px;line-height:1;cursor:pointer;opacity:0;transition:.15s;z-index:2}
+.mat:hover .mat-more,.mat.picked .mat-more{opacity:1}
+.mat-more:hover{background:var(--canvas-2);border-color:var(--line);color:var(--ink)}
+.mat.removing{opacity:0;transform:scale(.97);transition:.18s}
+.pop{position:fixed;z-index:90;min-width:158px;padding:5px;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-lg);display:none}
+.pop.show{display:block}
+.pop button{display:flex;width:100%;align-items:center;gap:8px;padding:7px 10px;border:0;background:none;border-radius:7px;font-size:12.5px;color:var(--ink);text-align:left;cursor:pointer;font-family:inherit}
+.pop button:hover{background:var(--canvas-2)}
+.pop button.danger{color:var(--danger)}
+.pop hr{border:0;border-top:1px solid var(--line);margin:4px 2px}
+.sugg{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+.composer{
+  position:sticky;bottom:0;padding:12px clamp(18px,2.4vw,30px) 18px;
+  background:linear-gradient(180deg,rgba(244,243,238,0) 0%,var(--canvas) 26%);
+}
+.composer-inner{display:flex;align-items:flex-end;gap:10px;background:var(--surface);border:1px solid var(--line-strong);border-radius:14px;padding:9px 9px 9px 14px;box-shadow:var(--shadow)}
+.composer textarea{flex:1;border:0;outline:0;background:none;resize:none;min-height:26px;max-height:120px;font-size:13.5px;line-height:1.55;padding:4px 0}
+.composer .hintrow{display:flex;justify-content:space-between;font-size:11px;color:var(--faint);padding:7px 4px 0}
+
+/* 结果栏 */
+.result{display:flex;flex-direction:column;min-height:0;background:var(--surface)}
+.result-head{padding:16px 18px 12px;border-bottom:1px solid var(--line);display:grid;gap:10px}
+.seg{display:flex;gap:3px;padding:3px;background:var(--canvas-2);border-radius:9px;width:max-content}
+.seg button{padding:5px 11px;border:0;background:none;border-radius:7px;font-size:12px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.seg button.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:var(--shadow-sm)}
+.result-body{flex:1;overflow-y:auto;padding:16px 18px 24px;display:grid;gap:14px;align-content:start}
+.gen-title{font-size:17px;font-weight:700;letter-spacing:-.015em;line-height:1.42}
+.gen-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:11.5px;color:var(--faint);align-items:center}
+.tl{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11.5px;color:var(--accent);background:var(--accent-soft);border-radius:8px;padding:6px 10px;width:max-content}
+.tl::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--accent)}
+.item{display:grid;grid-template-columns:20px 1fr;gap:10px;padding:11px 0;border-bottom:1px dashed var(--line)}
+.item:last-child{border-bottom:0}
+.item .idx{font-family:var(--mono);font-size:11px;color:var(--faint);padding-top:2px}
+.item .h{font-size:13.5px;font-weight:650;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.item .d{font-size:12.5px;color:var(--muted);line-height:1.6;margin-top:4px}
+.mins{font-family:var(--mono);font-size:11px;color:var(--accent-2);background:var(--accent-soft);padding:1px 6px;border-radius:5px}
+.must{font-size:10.5px;color:#6E4C10;background:var(--amber-soft);padding:1px 6px;border-radius:5px;font-weight:600}
+.cite-link{font-size:11px;color:var(--accent);border:1px solid #CFE0D5;background:var(--accent-soft);border-radius:5px;padding:1px 6px;cursor:pointer;font-weight:600}
+.cite-link:hover{background:#D8E8DE}
+.result-foot{padding:12px 18px;border-top:1px solid var(--line);display:grid;gap:9px;background:var(--surface-2)}
+.checks{display:flex;gap:5px;flex-wrap:wrap}
+.ck{font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:1px 6px;background:var(--surface)}
+.ck.pass{color:var(--accent);border-color:#CFE0D5;background:var(--accent-soft)}
+.ck.warn{color:var(--amber);border-color:#EBD9B6;background:var(--amber-soft)}
+.ck.block{color:var(--danger);border-color:#EFD6D0;background:var(--danger-soft)}
+
+/* ========== 方案库 ========== */
+.grid-plans{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.plan{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:grid;gap:10px;box-shadow:var(--shadow-sm);cursor:pointer;transition:transform .2s var(--ease),box-shadow .2s var(--ease)}
+.plan:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.plan-top{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.plan h4{font-size:14.5px;font-weight:650;line-height:1.42}
+.plan p{font-size:12.5px;color:var(--muted);line-height:1.62;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.plan-foot{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--faint);border-top:1px dashed var(--line);padding-top:9px}
+.plan-actions{margin-left:auto;display:flex;gap:6px}
+
+/* 方案详情 */
+.detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(330px,400px);height:100vh;height:100dvh}
+.detail-main{overflow-y:auto;padding:24px clamp(20px,3vw,40px) 60px;border-right:1px solid var(--line)}
+.detail-aside{overflow-y:auto;padding:20px 18px 40px;background:var(--surface-2)}
+.doc h2{font-size:21px;letter-spacing:-.02em;font-weight:700;line-height:1.4}
+.doc .sec-note{font-size:11.5px;color:var(--faint);display:flex;align-items:center;gap:6px;margin-bottom:7px;text-transform:uppercase;letter-spacing:.1em}
+.doc .block{font-size:13.5px;line-height:1.78;color:var(--ink-2);white-space:pre-wrap}
+.private{background:var(--amber-soft);border:1px dashed #E4CEA4;border-radius:12px;padding:12px 14px;margin-top:14px}
+.private .lbl{font-size:11px;color:#7A5512;font-weight:700;letter-spacing:.06em;margin-bottom:5px}
+.private .txt{font-size:12.5px;color:#5F4413;line-height:1.65}
+.cite{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:11px 12px;display:grid;gap:7px;box-shadow:var(--shadow-sm);margin-bottom:9px;cursor:pointer;transition:border-color .16s}
+.cite:hover{border-color:var(--line-strong)}
+.cite .q{font-size:12.5px;line-height:1.62;color:var(--ink-2)}
+.cite .src{font-size:11px;color:var(--faint);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cite .src b{color:var(--accent);font-weight:600}
+.blk{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:13px 14px;font-size:12.5px;color:var(--muted);line-height:1.6}
+
+/* ========== 移动端 ========== */
+.phones{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;padding:10px 0 30px}
+.phone{width:300px;border-radius:34px;background:#15160F;padding:9px;box-shadow:var(--shadow-lg)}
+.phone-in{background:var(--canvas);border-radius:27px;overflow:hidden;height:560px;display:flex;flex-direction:column}
+.phone-status{display:flex;justify-content:space-between;padding:9px 16px 3px;font-size:10.5px;color:var(--ink-2);font-family:var(--mono)}
+.phone-head{padding:6px 14px 10px;display:flex;align-items:center;justify-content:space-between}
+.phone-body{flex:1;overflow:hidden;padding:0 12px;display:grid;gap:9px;align-content:start}
+.mini-mat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 11px;display:grid;gap:4px}
+.mini-mat .t{font-size:12px;font-weight:650;line-height:1.4}
+.mini-mat .x{font-size:11px;color:var(--muted);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.phone-tabs{display:flex;border-top:1px solid var(--line);background:var(--surface);padding:7px 0 9px}
+.phone-tabs div{flex:1;text-align:center;font-size:10.5px;color:var(--faint)}
+.phone-tabs div.on{color:var(--accent);font-weight:700}
+.phone-bubble{border-radius:13px 13px 4px 13px;background:var(--accent);color:#F6F5EF;font-size:11.5px;padding:8px 10px;justify-self:end;max-width:86%;line-height:1.5}
+.phone-ai{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:9px 10px;font-size:11px;color:var(--ink-2);line-height:1.55}
+
+/* ========== 响应式 ========== */
+.tabbar{display:none}
+@media (max-width:1080px){
+  .app{grid-template-columns:76px minmax(0,1fr)}
+  .brand-text,.nav-label,.nav-item span.lbl,.nav-item .count,.trial,.account-text{display:none}
+  .nav-item{justify-content:center;padding:11px}
+  .sidebar{align-items:center;padding-top:18px}
+  .workbench,.detail{grid-template-columns:1fr}
+  .result,.detail-aside{display:none}
+  .auth{grid-template-columns:1fr}
+  .auth-left{display:none}
+}
+@media (max-width:720px){
+  body{overflow:auto}
+  .app{grid-template-columns:1fr;height:auto;min-height:100dvh}
+  .sidebar{display:none}
+  .main{overflow:visible}
+  .tabbar{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:50;
+    background:rgba(255,255,255,.94);backdrop-filter:blur(12px);border-top:1px solid var(--line);
+    padding:7px 0 max(7px,env(safe-area-inset-bottom));
+  }
+  .tabbar button{flex:1;background:none;border:0;display:grid;gap:3px;justify-items:center;font-size:10.5px;color:var(--faint);cursor:pointer;padding:4px}
+  .tabbar button .ic{width:22px;height:22px;border-radius:7px;background:var(--canvas-2);display:grid;place-items:center;font-size:11px}
+  .tabbar button.on{color:var(--accent);font-weight:700}
+  .tabbar button.on .ic{background:var(--accent);color:#fff}
+  .pad{padding:18px 16px 90px}
+  .workbench{height:auto;min-height:calc(100dvh - 56px)}
+  .thread{padding-bottom:150px}
+  .grid-materials,.grid-plans{grid-template-columns:1fr}
+  .selectbar{bottom:70px}
+  .drawer{width:100%}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms !important;transition-duration:.001ms !important}
+}
+
+/* 压过 design-tokens.css 里带 !important 的模板规则 */
+body{background-color:var(--canvas) !important;color:var(--ink) !important}
+:is([class*="eyebrow"],[class*="kicker"]){color:var(--accent) !important}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ================= 侧边栏 ================= -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">去</div>
+      <div class="brand-text">
+        <div class="brand-name">去做</div>
+        <div class="brand-sub">Knowledge → Plan</div>
+      </div>
+    </div>
+    <div class="nav-label">工作区</div>
+    <button class="nav-item active" data-goto="collect" onclick="go('collect')">
+      <i class="dot"></i><span class="lbl">我的收藏</span><span class="count">6</span>
+    </button>
+    <button class="nav-item" data-goto="arrange" onclick="go('arrange')">
+      <i class="dot"></i><span class="lbl">做个安排</span><span class="count">进行中</span>
+    </button>
+    <button class="nav-item" data-goto="plans" onclick="go('plans')">
+      <i class="dot"></i><span class="lbl">我的方案</span><span class="count">3</span>
+    </button>
+    <div class="nav-label" style="margin-top:10px">设计预览</div>
+    <button class="nav-item" onclick="go('auth')"><i class="dot"></i><span class="lbl">登录 / 注册</span></button>
+    <button class="nav-item" onclick="go('detail')"><i class="dot"></i><span class="lbl">方案与出处</span></button>
+    <button class="nav-item" onclick="go('mobile')"><i class="dot"></i><span class="lbl">手机端</span></button>
+
+    <div class="sidebar-foot">
+      <div class="trial">
+        <div class="trial-top"><span>试用期剩余</span><span class="mono">11-21</span></div>
+        <div class="trial-days">9 <span style="font-size:11px;color:var(--muted);font-family:var(--sans)">天</span></div>
+        <div class="bar"><i style="width:30%"></i></div>
+        <div style="font-size:11px;color:var(--faint);margin-top:7px">12-21 转只读 · 12-28 清理</div>
+      </div>
+      <div class="account" onclick="go('auth')">
+        <div class="avatar">林</div>
+        <div class="account-text">
+          <div class="account-name">林同学</div>
+          <div class="account-sub">试用账号 · 未绑定</div>
+        </div>
+      </div>
+      <button class="btn quiet sm" style="width:100%;margin-top:7px" onclick="logout()">退出登录</button>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <!-- ================= 屏幕 1：我的收藏 ================= -->
+    <section class="screen active" id="screen-collect">
+      <div class="pad">
+        <div class="page-head">
+          <div>
+            <div class="eyebrow">Step 1 · 先放材料</div>
+            <h1 class="title">我的收藏</h1>
+            <p class="sub">把课件、通知、手记收进来。做安排时只检索这里的材料，每句话都能点回出处。</p>
+          </div>
+          <div class="row">
+            <button class="btn" onclick="openDrawer('upload')">↑ 上传 PDF / 文档</button>
+            <button class="btn primary" onclick="openDrawer('new')">＋ 新增材料</button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <label class="search">
+            <span style="color:var(--faint)">⌕</span>
+            <input placeholder="搜标题、摘录或备注…" oninput="filterMats(this.value)" />
+            <span class="kbd">/</span>
+          </label>
+          <div class="chips" id="topicChips">
+            <button class="chip on" data-topic="全部">全部<span class="n">6</span></button>
+            <button class="chip" data-topic="复习">复习<span class="n">3</span></button>
+            <button class="chip" data-topic="出行">出行<span class="n">1</span></button>
+            <button class="chip" data-topic="活动">活动<span class="n">1</span></button>
+            <button class="chip" data-topic="其他">其他<span class="n">1</span></button>
+            <button class="chip" onclick="toast('主题是你自己起的名字，比如「毕业论文」「社团」')">＋ 新主题</button>
+          </div>
+          <div class="spacer"></div>
+          <button class="btn quiet sm">按更新时间 ↓</button>
+        </div>
+
+        <div class="empty" id="emptyState" style="display:none">
+          <div class="empty-ic">⌕</div>
+          <b>没有匹配的材料</b>
+          <p>换个词试试，或把主题切回「全部」。也可以现在就补一份——手打一段摘录最省事，不用等文件解析。</p>
+          <div class="row" style="justify-content:center">
+            <button class="btn" onclick="document.querySelector('.search input').value='';filterMats('')">清除搜索</button>
+            <button class="btn primary" onclick="openDrawer('new')">＋ 新增材料</button>
+          </div>
+        </div>
+
+        <div class="grid-materials" id="matGrid">
+          <article class="mat" data-topic="复习" data-text="第十章 复习重点与题型分布 课件 积分 级数 常考">
+            <div class="mat-top">
+              <span class="check"></span><button class="mat-more" title="编辑 / 删除" onclick="event.stopPropagation();openMatMenu(this)">⋯</button>
+              <div>
+                <div class="mat-title">第十章 复习重点与题型分布</div>
+                <div class="mat-excerpt">级数收敛判别与积分换序是本次大题重点，选择填空覆盖…常考的三种题型：判敛、求和、应用。</div>
+              </div>
+            </div>
+            <div class="mat-foot">
+              <span class="badge topic">复习</span>
+              <span class="badge kind">课件</span>
+              <span>第 8–11 页</span>
+              <span class="meta-dot"></span>
+              <span>2 小时前</span>
+            </div>
+          </article>
+
+          <article class="mat" data-topic="复习" data-text="期中范围说明与评分构成 网页 教务 通知 平时分">
+            <div class="mat-top">
+              <span class="check"></span><button class="mat-more" title="编辑 / 删除" onclick="event.stopPropagation();openMatMenu(this)">⋯</button>
+              <div>
+                <div class="mat-title">期中范围说明与评分构成</div>
+                <div class="mat-excerpt">第 1–9 章全考，不带计算器。平时 30% + 期中 30% + 期末 40%，缺勤三次以上扣总评。</div>
+              </div>
+            </div>
+            <div class="mat-foot">
+              <span class="badge topic">复习</span>
+              <span class="badge kind">网页</span>
+              <span class="badge warn">仅跳转</span>
+              <span class="meta-dot"></span>
+              <span>昨天</span>
+            </div>
+          </article>
+
+          <article class="mat" data-topic="复习" data-text="导师备注 错题集中在积分 手记">
+            <div class="mat-top">
+              <span class="check"></span><button class="mat-more" title="编辑 / 删除" onclick="event.stopPropagation();openMatMenu(this)">⋯</button>
+              <div>
+                <div class="mat-title">导师备注：错题集中在积分与级数</div>
+                <div class="mat-excerpt">上次答疑说到第 7、8 章错了 6 道，都是换元后忘记回代。建议先重做课后 7.3、8.1。</div>
+              </div>
+            </div>
+            <div class="mat-foot">
+              <span class="badge topic">复习</span>
+              <span class="badge kind">手记</span>
+              <span class="meta-dot"></span>
+              <span>3 天前</span>
+            </div>
+          </article>
+
+          <article class="mat" data-topic="出行" data-text="周末返校 高铁 地铁 换乘 打车 时间">
+            <div class="mat-top">
+              <span class="check"></span><button class="mat-more" title="编辑 / 删除" onclick="event.stopPropagation();openMatMenu(this)">⋯</button>
+              <div>
+                <div class="mat-title">周末返校：高铁 + 地铁换乘记录</div>
+                <div class="mat-excerpt">16:15 那班 47 分钟到南站，地铁 2 号线转 1 号线约 35 分钟，赶 18:00 前到宿舍要留 10 分钟步行。</div>
+              </div>
+            </div>
+            <div class="mat-foot">
+              <span class="badge topic">出行</span>
+              <span class="badge kind">手记</span>
+              <span class="meta-dot"></span>
+              <span>5 天前</span>
+            </div>
+          </article>
+
+          <article class="mat" data-topic="活动" data-text="社团招新 活动流程 模板 docx 签到 物料">
+            <div class="mat-top">
+              <span class="check"></span><button class="mat-more" title="编辑 / 删除" onclick="event.stopPropagation();openMatMenu(this)">⋯</button>
+              <div>
+                <div class="mat-title">社团招新活动流程模板</div>
+                <div class="mat-excerpt">签到 → 开场 5 分钟 → 三个摊位轮转（每摊 12 分钟）→ 答疑 → 合影。物料含签到表、贴纸 200 张、桌牌 6 个。</div>
+              </div>
+            </div>
+            <div class="mat-foot">
+              <span class="badge topic">活动</span>
+              <span class="badge kind">文件</span>
+              <span class="badge ok">已转 Markdown</span>
+              <span class="meta-dot"></span>
+              <span>上周</span>
+            </div>
+          </article>
+
+          <article class="mat" data-topic="其他" data-text="图书馆 自习室 开放 时段 网页">
+            <div class="mat-top">
+              <span class="check"></span><button class="mat-more" title="编辑 / 删除" onclick="event.stopPropagation();openMatMenu(this)">⋯</button>
+              <div>
+                <div class="mat-title">图书馆自习室开放时段</div>
+                <div class="mat-excerpt">周二、周四 14:00 后 A 区空位较多，考试周延长到 23:00，需要提前一天在系统里预约。</div>
+              </div>
+            </div>
+            <div class="mat-foot">
+              <span class="badge topic">其他</span>
+              <span class="badge kind">网页</span>
+              <span class="meta-dot"></span>
+              <span>上周</span>
+            </div>
+          </article>
+        </div>
+
+        <div class="row" style="justify-content:center;margin-top:14px">
+          <button class="btn quiet sm" onclick="toast('加载更多（游标分页，每页 20 份）')">加载更多</button>
+          <span style="font-size:11.5px;color:var(--faint)">共 6 份 · 按更新时间倒序</span>
+        </div>
+
+        <div class="selectbar" id="selectbar">
+          <span>已选 <b id="selCount">0</b> 份材料</span>
+          <span style="opacity:.45">|</span>
+          <span style="font-size:12px;opacity:.7">做安排时只会用这些材料</span>
+          <button class="btn sm" onclick="batchTopic()">改主题</button>
+          <button class="btn sm" onclick="batchDelete()">删除</button>
+          <button class="btn sm" onclick="clearSel()">清空</button>
+          <button class="btn primary sm" onclick="sendToChat()">送入对话 →</button>
+        </div>
+      </div>
+    </section>
+
+    
+    <!-- ================= 屏幕 2：做个安排 ================= -->
+    <section class="screen" id="screen-arrange">
+      <div class="workbench">
+        <!-- 左：对话 -->
+        <div class="stream">
+          <div class="stream-head">
+            <div class="row" style="justify-content:space-between">
+              <div>
+                <div class="eyebrow" style="margin-bottom:4px">Step 2 · 说任务，改条件</div>
+                <div class="row" style="gap:8px">
+                  <h2 style="font-size:18px;font-weight:700;letter-spacing:-.015em">做个安排</h2>
+                  <span class="badge ok">对话 #A7F2</span>
+                </div>
+              </div>
+              <div class="row" style="gap:8px">
+                <div class="seg" id="taskSeg">
+                  <button class="on">复习</button><button>出行</button><button>活动</button>
+                </div>
+                <button class="btn sm">＋ 新任务</button>
+              </div>
+            </div>
+            <div class="steps">
+              <div class="step done"><span class="n">✓</span>说任务</div><span class="step-sep"></span>
+              <div class="step done"><span class="n">✓</span>确认材料</div><span class="step-sep"></span>
+              <div class="step done"><span class="n">✓</span>生成</div><span class="step-sep"></span>
+              <div class="step now"><span class="n">4</span>改与存</div>
+            </div>
+          </div>
+
+          <div class="thread" id="thread">
+
+            <div style="margin-top:4px">
+              <div class="role"><span class="ai">智</span>助手 · 复习安排 · 被拦下</div>
+              <div class="acard">
+                <h5>这次没有生成 <span class="badge warn">blocked</span></h5>
+                <div class="notice bad" style="margin-top:9px">
+                  <i>!</i>
+                  <div><b>SOURCE_INSUFFICIENT</b><br>你勾的两份材料只有链接和一句摘要，不能当依据。补一份带正文的，或把「仅跳转」那份换成课件。</div>
+                </div>
+                <div class="row" style="margin-top:10px">
+                  <button class="btn sm" onclick="openDrawer('new')">补一份材料</button>
+                  <button class="btn quiet sm" onclick="go('detail')">看是哪条没过</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="notice" style="background:var(--canvas-2);border-color:var(--line);color:var(--muted);font-size:12px">
+              <i>↻</i>
+              <div>上次用 <b>Kimi K2.6</b> 生成时 30 秒没返回，已自动退回 <b>DeepSeek Chat</b> 重试成功。材料和条件都还在，只是模型换了。</div>
+            </div>
+            <!-- 用户第一条 -->
+            <div class="msg-user">
+              <div class="q">周三晚上复习微积分，两小时，重点放在级数。</div>
+              <div class="conds"><span>120 分钟</span><span>周三 19:00 后</span><span>不带计算器</span></div>
+            </div>
+
+            <!-- 助手：检索候选 -->
+            <div>
+              <div class="role"><span class="ai">智</span>助手 · 检索材料</div>
+              <div class="acard">
+                <h5>从你的收藏里找到 4 份 <span class="badge ghost">仅本次使用</span></h5>
+                <div class="cand">
+                  <div class="switch on" onclick="toggleSwitch(this)"></div>
+                  <div>
+                    <div class="t">第十章 复习重点与题型分布</div>
+                    <div class="r">命中：<b>级数、判敛、题型</b> · 课件第 8–11 页</div>
+                  </div>
+                </div>
+                <div class="cand">
+                  <div class="switch on" onclick="toggleSwitch(this)"></div>
+                  <div>
+                    <div class="t">导师备注：错题集中在积分与级数</div>
+                    <div class="r">命中：<b>错题、练习、换元</b> · 手记</div>
+                  </div>
+                </div>
+                <div class="cand">
+                  <div class="switch on" onclick="toggleSwitch(this)"></div>
+                  <div>
+                    <div class="t">图书馆自习室开放时段</div>
+                    <div class="r">命中：<b>自习、预约</b> · 网页</div>
+                  </div>
+                </div>
+                <div class="cand off">
+                  <div class="switch" onclick="toggleSwitch(this)"></div>
+                  <div>
+                    <div class="t">期中范围说明与评分构成 <span class="badge warn" style="margin-left:4px">仅跳转</span></div>
+                    <div class="r">这份只有链接，不能作为依据，已自动排除。</div>
+                  </div>
+                </div>
+                <div class="row" style="margin-top:11px">
+                  <button class="btn primary sm" onclick="toast('已确认 3 份材料')">确认这 3 份</button>
+                  <button class="btn quiet sm">再找一些</button>
+                  <span style="font-size:11.5px;color:var(--faint)">未确认前不会生成</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 助手：结果摘要 -->
+            <div>
+              <div class="role"><span class="ai">智</span>助手 · 复习安排 · DeepSeek Chat</div>
+              <div class="acard">
+                <h5>两小时复习安排：级数优先，错题穿插 <span class="badge ok">已生成</span></h5>
+                <div style="font-size:12.5px;color:var(--muted);line-height:1.65">
+                  15:15 开始，先过判敛三法，再重做 7.3 / 8.1，最后 10 分钟自测。时间总长 60 分钟 ——
+                  你给的 120 分钟里我留了 60 分钟机动，可以随时说「排满 120 分钟」。
+                </div>
+                <div class="notice warn" style="margin-top:11px">
+                  <i>!</i><div>有两处器材数量来自上次记录（草稿纸 5 张），材料里没有写，已在右侧标出，可自行改。</div>
+                </div>
+                <div class="sugg">
+                  <button class="btn sm" onclick="toast('已按 60 分钟重排')">压缩到 60 分钟</button>
+                  <button class="btn sm" onclick="toast('已改到周六上午')">换到周六上午</button>
+                  <button class="btn sm" onclick="toast('已加上模拟题环节')">加 20 分钟模拟题</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 用户追问 -->
+            <div class="msg-user">
+              <div class="q">把级数放到最前面，另加 15 分钟只看错题。</div>
+              <div class="conds"><span>保留 3 份材料</span><span>条件已更新</span></div>
+            </div>
+
+            <div>
+              <div class="role"><span class="ai">智</span>助手 · 已重排</div>
+              <div class="acard">
+                <h5>已按新条件重排 <span class="badge ok">v2</span> <span class="badge ghost">旧版未保存</span></h5>
+                <div style="font-size:12.5px;color:var(--muted);line-height:1.65">
+                  级数移到 15:15–15:30，错题增加 15 分钟（7.3、8.1、8.4 三轮）。未保存的旧版不会覆盖「我的方案」里的记录。
+                </div>
+                <div class="row" style="margin-top:11px">
+                  <button class="btn primary sm" onclick="toast('已保存到我的方案')">保存为方案</button>
+                  <button class="btn quiet sm" onclick="go('detail')">看出处</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="composer">
+            <div class="composer-inner">
+              <textarea id="composer" rows="1" placeholder="改要求，比如「把复习时间压到 90 分钟」…"></textarea>
+              <button class="btn primary sm" onclick="sendMsg()" style="height:34px">发送 ↵</button>
+            </div>
+            <div class="hintrow">
+              <span>生成中再改条件，以最后一次为准</span>
+              <span class="mono">Ctrl + ↵ 换行</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右：结果栏 -->
+        <aside class="result">
+          <div class="result-head">
+            <div class="row" style="justify-content:space-between">
+              <div class="seg" id="modelSeg">
+                <button class="on">DeepSeek Chat</button><button>Kimi K2.6</button><button>Kimi K3</button><button onclick="toast('对比模式：同时跑 2–4 个模型，右栏分列')">对比</button>
+              </div>
+              <span class="badge ok">succeeded</span>
+            </div>
+            <div class="row" style="gap:8px;font-size:11.5px;color:var(--faint)">
+              <span class="mono">gen_9c31</span><span class="meta-dot"></span>
+              <span>3 份材料</span><span class="meta-dot"></span><span>20:14 生成</span>
+            </div>
+          </div>
+
+          <div class="result-body">
+            <div class="gen-title">两小时复习安排：级数优先，错题穿插</div>
+            <div class="tl">15:15 → 16:15</div>
+
+            <div>
+              <div class="item">
+                <div class="idx">01</div>
+                <div>
+                  <div class="h">判敛三法过一遍 <span class="mins">15 min</span><span class="must">必保留</span></div>
+                  <div class="d">比较 / 比值 / 积分判别各配一道例题，重点看「极限 &lt; 1」那一步的条件。</div>
+                  <div style="margin-top:6px"><span class="cite-link" onclick="go('detail')">出处 · 课件 第 8 页</span></div>
+                </div>
+              </div>
+              <div class="item">
+                <div class="idx">02</div>
+                <div>
+                  <div class="h">重做 7.3 与 8.1 错题 <span class="mins">20 min</span></div>
+                  <div class="d">先遮住答案重算，再对照原解法；两次错同一处就记到错题本第 3 条。</div>
+                  <div style="margin-top:6px"><span class="cite-link" onclick="go('detail')">出处 · 导师备注</span></div>
+                </div>
+              </div>
+              <div class="item">
+                <div class="idx">03</div>
+                <div>
+                  <div class="h">换元后回代专项 <span class="mins">15 min</span></div>
+                  <div class="d">上次 6 道错题都死在回代，练 4 道换元积分，每道写完整代换链。</div>
+                  <div style="margin-top:6px"><span class="cite-link" onclick="go('detail')">出处 · 课件 第 9–10 页</span></div>
+                </div>
+              </div>
+              <div class="item">
+                <div class="idx">04</div>
+                <div>
+                  <div class="h">5 道选择题自测 <span class="mins">10 min</span><span class="must">必保留</span></div>
+                  <div class="d">限时完成，错题立刻回看第 01 步的判断条件。</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="notice warn">
+              <i>!</i>
+              <div><b>2 处需要你确认</b><br>· 草稿纸 5 张：来自上次记录，材料里没有<br>· 自习室：材料提到需提前一天预约，未写具体房间</div>
+            </div>
+
+            <div>
+              <div class="sec-note" style="font-size:11px;color:var(--faint);margin-bottom:7px">八项复核</div>
+              <div class="checks">
+                <span class="ck pass">结构</span><span class="ck pass">引用闸门</span><span class="ck warn">数字白名单</span>
+                <span class="ck pass">时长合计</span><span class="ck pass">保留项覆盖</span><span class="ck pass">材料派生</span>
+                <span class="ck pass">预算</span><span class="ck warn">时间轴</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="result-foot">
+            <div class="row" style="gap:8px">
+              <button class="btn primary" style="flex:1" onclick="toast('已保存到我的方案')">保存为方案</button>
+              <button class="btn" onclick="toast('已复制公开版正文')">复制正文</button>
+            </div>
+            <div style="font-size:11px;color:var(--faint);display:flex;justify-content:space-between">
+              <span>复制不含私人备注与选择理由</span><span>3 条出处</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= 屏幕 3：我的方案 ================= -->
+    <section class="screen" id="screen-plans">
+      <div class="pad">
+        <div class="page-head">
+          <div>
+            <div class="eyebrow">Step 3 · 回看与复用</div>
+            <h1 class="title">我的方案</h1>
+            <p class="sub">复习笔记、行程、活动流程都存在这里。重复保存同一份会更新原记录，不会堆出一堆副本。</p>
+          </div>
+          <div class="row">
+            <button class="btn" onclick="toast('已复制最近一份公开版')">复制最近一份</button>
+            <button class="btn primary" onclick="go('arrange')">＋ 新安排</button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="chips">
+            <button class="chip on">全部<span class="n">3</span></button>
+            <button class="chip">复习<span class="n">1</span></button>
+            <button class="chip">出行<span class="n">1</span></button>
+            <button class="chip">活动<span class="n">1</span></button>
+          </div>
+          <div class="spacer"></div>
+          <span style="font-size:11.5px;color:var(--faint)">按更新时间排序 · 共 3 份</span>
+        </div>
+
+        <div class="grid-plans">
+          <article class="plan" onclick="go('detail')">
+            <div class="plan-top"><span class="badge topic">复习</span><span class="mono" style="color:var(--faint)">今天 20:14</span></div>
+            <h4>两小时复习安排：级数优先，错题穿插</h4>
+            <p>15:15 判敛三法 → 重做 7.3 / 8.1 → 换元回代专项 → 5 道选择自测。草稿纸 5 张需确认。</p>
+            <div class="plan-foot">
+              <span>3 条出处</span><span class="meta-dot"></span><span>v2</span>
+              <div class="plan-actions">
+                <button class="btn quiet sm" onclick="event.stopPropagation();toast('已复制公开版正文')">复制</button>
+                <button class="btn quiet sm" onclick="event.stopPropagation();openPlanMenu(this)">···</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="plan" onclick="go('detail')">
+            <div class="plan-top"><span class="badge topic" style="background:var(--amber-soft);color:var(--amber)">出行</span><span class="mono" style="color:var(--faint)">昨天 18:02</span></div>
+            <h4>周六返校：南站换乘 47 分钟</h4>
+            <p>16:15 高铁 → 2 号线转 1 号线 35 分钟 → 18:00 前到宿舍，留 10 分钟步行。打车备选 22 分钟。</p>
+            <div class="plan-foot">
+              <span>2 条出处</span><span class="meta-dot"></span><span>v1</span>
+              <div class="plan-actions">
+                <button class="btn quiet sm" onclick="event.stopPropagation();toast('已复制公开版正文')">复制</button>
+                <button class="btn quiet sm" onclick="event.stopPropagation();openPlanMenu(this)">···</button>
+              </div>
+            </div>
+          </article>
+
+          <article class="plan" onclick="go('detail')">
+            <div class="plan-top"><span class="badge topic" style="background:#EDE8F6;color:#59479B">活动</span><span class="mono" style="color:var(--faint)">11-15 14:30</span></div>
+            <h4>招新当天流程（40 人，3 个摊位）</h4>
+            <p>签到 → 开场 5 分钟 → 三摊轮转各 12 分钟 → 答疑 → 合影。物料：签到表、贴纸 200 张、桌牌 6 个。</p>
+            <div class="plan-foot">
+              <span>2 条出处</span><span class="meta-dot"></span><span>v1</span>
+              <div class="plan-actions">
+                <button class="btn quiet sm" onclick="event.stopPropagation();toast('已复制公开版正文')">复制</button>
+                <button class="btn quiet sm" onclick="event.stopPropagation();openPlanMenu(this)">···</button>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="blk" style="margin-top:18px;display:flex;gap:10px;align-items:center">
+          <span style="font-size:16px">ⓘ</span>
+          <div>重复保存同一份方案会更新原记录。生成中的方案也能再改条件，以最后一次输入为准。
+            <a href="#" onclick="go('auth');return false">了解试用期规则</a></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 屏幕 4：方案详情 + 出处 ================= -->
+    <section class="screen" id="screen-detail">
+      <div class="detail">
+        <div class="detail-main">
+          <button class="btn quiet sm" onclick="go('plans')">← 返回我的方案</button>
+          <div class="doc" style="margin-top:14px">
+            <div class="row" style="gap:8px;margin-bottom:10px">
+              <span class="badge topic">复习</span>
+              <span class="badge ghost">保存于 20:14</span>
+              <span class="badge ghost">v2</span>
+            </div>
+            <h2>两小时复习安排：级数优先，错题穿插</h2>
+            <div class="row" style="gap:6px;margin:12px 0 18px">
+              <span class="badge kind">120 分钟</span>
+              <span class="badge kind">周三 19:00 后</span>
+              <span class="badge kind">不带计算器</span>
+              <span class="badge kind">3 份材料</span>
+              <span class="badge kind">DeepSeek Chat</span>
+            </div>
+
+            <div class="block">15:15–15:30　判敛三法过一遍（必保留）
+比较 / 比值 / 积分判别各配一道例题，重点看「极限 &lt; 1」那一步的条件。
+
+15:30–15:50　重做 7.3 与 8.1 错题
+先遮住答案重算，再对照原解法；两次错同一处就记到错题本第 3 条。
+
+15:50–16:05　换元后回代专项
+上次 6 道错题都死在回代，练 4 道换元积分，每道写完整代换链。
+
+16:05–16:15　5 道选择题自测（必保留）
+限时完成，错题立刻回看第一步的判断条件。</div>
+
+            <div class="private">
+              <div class="lbl">私人备注 · 不会出现在复制版里</div>
+              <div class="txt">草稿纸 5 张是上次自己记的，别当成老师要求；自习室要提前一天在系统里约，明天记得约。</div>
+            </div>
+
+            <div style="margin-top:16px">
+              <div class="sec-note">选择理由 · 也不会复制</div>
+              <div style="font-size:12.5px;color:var(--muted);line-height:1.72">
+                优先放级数因为课件第 8 页标了「本次大题重点」；错题部分只用导师备注里的 7.3、8.1、8.4 三道，
+                没有编造题目编号。60 分钟机动留白是因为你不确定当天几点下晚课。
+              </div>
+            </div>
+
+            <div class="hairline"></div>
+            <div class="row">
+              <button class="btn primary" onclick="toast('已复制公开版正文（不含私人备注）')">复制公开版正文</button>
+              <button class="btn" onclick="go('arrange')">继续改这份</button>
+              <button class="btn quiet" onclick="toast('已导出 Markdown')">导出 .md</button>
+              <div class="spacer"></div>
+              <button class="btn quiet sm" style="color:var(--danger)" onclick="toast('已移到回收站')">删除</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="detail-aside">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px">
+            <div style="font-size:12px;font-weight:700;letter-spacing:.04em">出处 · 3 条</div>
+            <span class="mono" style="font-size:11px;color:var(--faint)">生成时快照</span>
+          </div>
+          <div class="cite">
+            <div class="q">「级数收敛判别与积分换序是本次大题重点，选择填空覆盖判敛、求和、应用三型。」</div>
+            <div class="src"><b>第十章 复习重点与题型分布</b><span>·</span><span>课件 第 8 页</span></div>
+            <div class="src" style="cursor:pointer;color:var(--accent)">↗ 打开原文件</div>
+          </div>
+          <div class="cite">
+            <div class="q">「第 7、8 章错了 6 道，都是换元后忘记回代。建议先重做课后 7.3、8.1。」</div>
+            <div class="src"><b>导师备注：错题集中在积分与级数</b><span>·</span><span>手记</span></div>
+          </div>
+          <div class="cite">
+            <div class="q">「周二、周四 14:00 后 A 区空位较多，考试周延长到 23:00，需提前一天预约。」</div>
+            <div class="src"><b>图书馆自习室开放时段</b><span>·</span><span>网页 第 1 页</span></div>
+            <div class="src" style="cursor:pointer;color:var(--accent)">↗ 跳到原网页</div>
+          </div>
+
+          <div class="blk" style="margin-top:14px;font-size:11.5px">
+            出处保存的是生成当时的摘录快照，之后改材料也不影响这份方案。
+          </div>
+
+          <div class="hairline"></div>
+          <div style="font-size:11.5px;color:var(--faint);line-height:1.7">
+            生成模型 DeepSeek Chat · 未联网<br>
+            复核：8 项通过 6 项 · 2 项提示<br>
+            生成耗时 6.4 秒
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= 屏幕 5：登录 / 注册 ================= -->
+    <section class="screen" id="screen-auth" style="height:100vh">
+      <div class="auth">
+        <div class="auth-left">
+          <div class="brand">
+            <div class="brand-mark">去</div>
+            <div class="brand-text"><div class="brand-name">去做</div><div class="brand-sub">Knowledge → Plan</div></div>
+          </div>
+          <div class="auth-quote">先<em>记住</em>，<br>再<em>安排</em>。</div>
+          <p style="color:var(--muted);font-size:13.5px;max-width:34ch;line-height:1.7">
+            把课件、通知和手记放进自己的知识库，说一句「周三复习微积分」，就能得到一份每句都有出处的安排。
+          </p>
+          <div class="auth-points">
+            <div class="auth-point"><i>1</i><div><b>资料能用进方案</b> · 只检索你自己收的材料，不联网猜</div></div>
+            <div class="auth-point"><i>2</i><div><b>改要求，方案跟着改</b> · 说得越具体，排得越准</div></div>
+            <div class="auth-point"><i>3</i><div><b>有据可查</b> · 每条安排都能点回课件页码或原网页</div></div>
+          </div>
+          <div style="margin-top:auto;font-size:11.5px;color:var(--faint);display:flex;gap:14px;flex-wrap:wrap">
+            <span>试用 30 天 · 到期转只读</span><span>·</span><span>数据只在你账号内</span><span>·</span><span>v0.2.4</span>
+          </div>
+        </div>
+
+        <div class="auth-right">
+          <div class="auth-card">
+            <div class="auth-tabs" id="authTabs">
+              <button class="on" onclick="authTab(this,'login')">登录</button>
+              <button onclick="authTab(this,'register')">注册</button>
+            </div>
+            <div class="field">
+              <label>用户名 <span class="hint">3–32 位，字母数字下划线</span></label>
+              <input class="input" placeholder="lin_xiaoming" value="lin_xiaoming" />
+            </div>
+            <div class="field">
+              <label>密码 <span class="hint">至少 8 位</span></label>
+              <input class="input" type="password" placeholder="••••••••" value="········" />
+            </div>
+            <button class="btn primary" style="width:100%;height:42px" onclick="toast('已登录，进入我的收藏');go('collect')">
+              登录并继续
+            </button>
+            <div class="trial-note">
+              <span>ⓘ</span>
+              <div>不注册也能用：匿名试用 <b>30 天</b>，到期转只读，再过 7 天清理。注册或登录后材料跟账号走，<b>不再计时</b>。</div>
+            </div>
+            <button class="btn" style="width:100%" onclick="go('collect')">先不登录，用试用身份看看</button>
+            <div style="font-size:11.5px;color:var(--faint);text-align:center;line-height:1.7">
+              继续即表示同意「数据只用于生成你的方案」<br>模型密钥只存在服务端
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= 屏幕 6：手机端 ================= -->
+    <section class="screen" id="screen-mobile">
+      <div class="pad">
+        <div class="page-head">
+          <div>
+            <div class="eyebrow">设备适配 · 手机浏览器</div>
+            <h1 class="title">手机上也能走完三步</h1>
+            <p class="sub">电脑优先，手机浏览器打开同一网址。输入、引用展开、复制在 iOS Safari 与 Android Chrome 都能用；
+              底部换成三个分栏，抽屉改为全屏。</p>
+          </div>
+        </div>
+
+        <div class="phones">
+          <!-- 手机 1：收藏 -->
+          <div class="phone">
+            <div class="phone-in">
+              <div class="phone-status"><span>20:14</span><span>5G ▮▮▮</span></div>
+              <div class="phone-head">
+                <div><div style="font-size:11px;color:var(--faint);letter-spacing:.1em">STEP 1</div><b style="font-size:15px">我的收藏</b></div>
+                <span class="badge ok" style="font-size:10px">6 份</span>
+              </div>
+              <div class="phone-body">
+                <div style="display:flex;gap:5px;overflow:hidden">
+                  <span class="chip on" style="font-size:10.5px;padding:4px 9px">全部</span>
+                  <span class="chip" style="font-size:10.5px;padding:4px 9px">复习</span>
+                  <span class="chip" style="font-size:10.5px;padding:4px 9px">出行</span>
+                </div>
+                <div class="mini-mat" style="border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)">
+                  <div class="row" style="gap:6px"><span class="badge topic" style="font-size:9.5px">复习</span><span style="font-size:9.5px;color:var(--faint)">课件 8 页</span></div>
+                  <div class="t">第十章 复习重点与题型分布</div>
+                  <div class="x">级数收敛判别与积分换序是本次大题重点…</div>
+                </div>
+                <div class="mini-mat">
+                  <div class="row" style="gap:6px"><span class="badge topic" style="font-size:9.5px">复习</span><span style="font-size:9.5px;color:var(--faint)">手记</span></div>
+                  <div class="t">导师备注：错题集中在积分与级数</div>
+                  <div class="x">上次答疑说到第 7、8 章错了 6 道…</div>
+                </div>
+                <div class="mini-mat">
+                  <div class="row" style="gap:6px"><span class="badge topic" style="font-size:9.5px">出行</span><span style="font-size:9.5px;color:var(--faint)">手记</span></div>
+                  <div class="t">周末返校：高铁 + 地铁换乘记录</div>
+                  <div class="x">16:15 那班 47 分钟到南站…</div>
+                </div>
+              </div>
+              <div style="padding:8px 12px 4px"><div class="btn primary" style="width:100%;height:34px;font-size:12px">送入对话 · 2 份</div></div>
+              <div class="phone-tabs"><div class="on">收藏</div><div>安排</div><div>方案</div></div>
+            </div>
+          </div>
+
+          <!-- 手机 2：对话 -->
+          <div class="phone">
+            <div class="phone-in">
+              <div class="phone-status"><span>20:15</span><span>5G ▮▮▮</span></div>
+              <div class="phone-head">
+                <div><div style="font-size:11px;color:var(--faint);letter-spacing:.1em">STEP 2</div><b style="font-size:15px">做个安排</b></div>
+                <span class="badge ghost" style="font-size:10px">复习</span>
+              </div>
+              <div class="phone-body">
+                <div class="phone-bubble">周三晚上复习微积分，两小时，重点级数。</div>
+                <div class="phone-ai">
+                  <b style="font-size:11px">找到 3 份可用材料</b><br>
+                  · 第十章 复习重点（课件 8–11 页）<br>
+                  · 导师备注：错题集中<br>
+                  <span style="color:var(--accent)">确认后开始生成 →</span>
+                </div>
+                <div class="phone-ai" style="border-color:#CFE0D5">
+                  <b style="font-size:11px">两小时复习安排</b><br>
+                  15:15 判敛三法 · 15 min<br>
+                  15:30 重做 7.3 / 8.1 · 20 min<br>
+                  15:50 换元回代 · 15 min<br>
+                  <span style="color:var(--accent)">保存为方案</span>
+                </div>
+              </div>
+              <div style="padding:8px 12px 6px;display:flex;gap:6px">
+                <div style="flex:1;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:11px;color:var(--faint);padding:8px 10px">改要求…</div>
+                <div class="btn primary" style="padding:0 12px;font-size:12px">发送</div>
+              </div>
+              <div class="phone-tabs"><div>收藏</div><div class="on">安排</div><div>方案</div></div>
+            </div>
+          </div>
+
+          <!-- 手机 3：方案 + 出处 -->
+          <div class="phone">
+            <div class="phone-in">
+              <div class="phone-status"><span>20:16</span><span>5G ▮▮▮</span></div>
+              <div class="phone-head">
+                <div><div style="font-size:11px;color:var(--faint);letter-spacing:.1em">STEP 3</div><b style="font-size:15px">两小时复习安排</b></div>
+                <span class="badge ok" style="font-size:10px">v2</span>
+              </div>
+              <div class="phone-body">
+                <div class="phone-ai" style="line-height:1.7">
+                  15:15–15:30　判敛三法（必保留）<br>
+                  15:30–15:50　重做错题<br>
+                  15:50–16:05　换元回代<br>
+                  16:05–16:15　自测 5 题
+                </div>
+                <div class="mini-mat" style="background:var(--amber-soft);border-color:#E4CEA4">
+                  <div class="t" style="font-size:11px;color:#7A5512">私人备注 · 不复制</div>
+                  <div class="x" style="color:#5F4413">草稿纸数量是上次自己记的，别当老师要求。</div>
+                </div>
+                <div class="mini-mat">
+                  <div class="t" style="font-size:11px">出处 · 3 条</div>
+                  <div class="x">「级数收敛判别与积分换序是本次大题重点」<br><span style="color:var(--accent)">课件 第 8 页 ↗</span></div>
+                </div>
+                <div class="btn primary" style="height:34px;font-size:12px">复制公开版正文</div>
+              </div>
+              <div class="phone-tabs"><div>收藏</div><div>安排</div><div class="on">方案</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ================= 材料抽屉 ================= -->
+<div class="pop" id="pop"></div>
+<div class="scrim" id="scrim" onclick="closeDrawer()"></div>
+<aside class="drawer" id="drawer">
+  <div class="drawer-head">
+    <div>
+      <div class="eyebrow" style="margin-bottom:4px">材料</div>
+      <h2 style="font-size:17px;font-weight:700" id="drawerTitle">新增材料</h2>
+      <div style="font-size:12px;color:var(--faint);margin-top:3px" id="drawerSub">来源与页码会跟着方案一路带到出处里</div>
+    </div>
+    <button class="btn quiet sm" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-body">
+    <div class="segment" id="segKind">
+      <button class="on" onclick="seg(this,'web')">网页链接</button>
+      <button onclick="seg(this,'file')">上传文件</button>
+      <button onclick="seg(this,'manual')">手打摘录</button>
+    </div>
+
+    <div class="field">
+      <label>标题 <span class="hint">1–120 字</span></label>
+      <input class="input" value="第十章 复习重点与题型分布" />
+    </div>
+    <div class="two">
+      <div class="field">
+        <label>主题</label>
+        <select class="select"><option>复习</option><option>出行</option><option>活动</option><option>其他</option></select>
+      </div>
+      <div class="field">
+        <label>状态</label>
+        <select class="select"><option>可作为依据（citable）</option><option>仅跳转查看（link_only）</option><option>不可用（unusable）</option></select>
+      </div>
+    </div>
+
+    <div class="field" id="fieldWeb">
+      <label>原文链接 <span class="hint">有链接才能跳到原网页</span></label>
+      <input class="input" placeholder="https://…" value="https://jw.example.edu.cn/notice/20261105" />
+    </div>
+
+    <div class="field" id="fieldFile" style="display:none">
+      <label>上传 PDF / 文档 <span class="hint">先转 Markdown，不做版式还原</span></label>
+      <div class="dropzone" onclick="toast('已读取 12 页，转成 Markdown')">
+        <b>拖入文件，或点击选择</b>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:4px">支持 .pdf .docx .pptx .md .txt · 单份 ≤ 20MB</div>
+      </div>
+      <div class="md" style="margin-top:10px">
+        <h4>第十章 复习重点与题型分布</h4>
+        <div>## 8 页 · 判敛三法</div>
+        <div>1. 比较判别：找同阶 p 级数<br>2. 比值判别：极限 &lt; 1 收敛<br>3. 积分判别：单调递减非负</div>
+        <div style="color:var(--faint);margin-top:6px">已截取前 20000 字符，其余未收录。</div>
+      </div>
+    </div>
+
+    <div class="two">
+      <div class="field"><label>起始页</label><input class="input mono" value="8" /></div>
+      <div class="field"><label>结束页</label><input class="input mono" value="11" /></div>
+    </div>
+
+    <div class="field">
+      <label>摘录正文 <span class="hint">做方案时模型只会看到这段</span></label>
+      <textarea class="textarea">级数收敛判别与积分换序是本次大题重点。
+常考三型：判敛、求和、应用。
+练习建议：课后 7.3、8.1、8.4。</textarea>
+    </div>
+    <div class="field">
+      <label>私人备注 <span class="hint">只给你看，不进公开版</span></label>
+      <input class="input" placeholder="比如：这章老师上课跳过了一节" />
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn quiet" onclick="closeDrawer()">取消</button>
+    <button class="btn primary" onclick="closeDrawer();toast('已保存到我的收藏')">保存材料</button>
+  </div>
+</aside>
+
+<div class="toast" id="toast"></div>
+<nav class="tabbar">
+  <button class="on" onclick="go('collect')"><span class="ic">收</span>收藏</button>
+  <button onclick="go('arrange')"><span class="ic">安</span>安排</button>
+  <button onclick="go('plans')"><span class="ic">案</span>方案</button>
+  <button onclick="go('auth')"><span class="ic">我</span>账户</button>
+</nav>
+
+<script>
+var SCREENS = ['collect','arrange','plans','detail','auth','mobile'];
+function go(id){
+  SCREENS.forEach(function(s){
+    var el = document.getElementById('screen-' + s);
+    if (el) el.classList.toggle('active', s === id);
+  });
+  document.querySelectorAll('.nav-item[data-goto]').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-goto') === id);
+  });
+  document.querySelectorAll('.tabbar button').forEach(function(b, i){
+    b.classList.toggle('on', ['collect','arrange','plans','auth'][i] === id);
+  });
+  var main = document.querySelector('.main');
+  if (main) main.scrollTop = 0;
+  closeDrawer();
+}
+
+function openDrawer(kind){
+  document.getElementById('scrim').classList.add('show');
+  document.getElementById('drawer').classList.add('show');
+  var t = document.getElementById('drawerTitle');
+  var s = document.getElementById('drawerSub');
+  if (kind === 'upload'){
+    t.textContent = '上传文件：先转 Markdown';
+    s.textContent = 'PDF / docx / pptx 会转成纯文本，不做版式还原，也不做扫描识别';
+    var b = document.querySelectorAll('#segKind button');
+    if (b[1]) { b.forEach(function(x){x.classList.remove('on')}); b[1].classList.add('on'); }
+    document.getElementById('fieldWeb').style.display = 'none';
+    document.getElementById('fieldFile').style.display = 'grid';
+  } else {
+    t.textContent = '新增材料';
+    s.textContent = '来源与页码会跟着方案一路带到出处里';
+    document.getElementById('fieldWeb').style.display = 'grid';
+    document.getElementById('fieldFile').style.display = 'none';
+  }
+}
+function closeDrawer(){
+  document.getElementById('scrim').classList.remove('show');
+  document.getElementById('drawer').classList.remove('show');
+}
+function seg(btn, kind){
+  btn.parentNode.querySelectorAll('button').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on');
+  document.getElementById('fieldWeb').style.display = kind === 'web' ? 'grid' : 'none';
+  document.getElementById('fieldFile').style.display = kind === 'file' ? 'grid' : 'none';
+}
+function toggleSwitch(el){ el.classList.toggle('on'); }
+
+/* 材料选择 */
+function refreshSel(){
+  var picked = document.querySelectorAll('#matGrid .mat.picked');
+  document.getElementById('selCount').textContent = picked.length;
+  document.getElementById('selectbar').classList.toggle('show', picked.length > 0);
+}
+document.getElementById('matGrid').addEventListener('click', function(e){
+  var card = e.target.closest('.mat');
+  if (!card) return;
+  card.classList.toggle('picked');
+  refreshSel();
+});
+function clearSel(){
+  document.querySelectorAll('#matGrid .mat.picked').forEach(function(c){ c.classList.remove('picked'); });
+  refreshSel();
+}
+function sendToChat(){
+  var n = document.querySelectorAll('#matGrid .mat.picked').length;
+  go('arrange');
+  toast('已带 ' + n + ' 份材料进入对话');
+}
+
+/* 搜索与主题筛选 */
+var curTopic = '全部';
+function filterMats(q){
+  q = (q || '').trim().toLowerCase();
+  var shown = 0;
+  document.querySelectorAll('#matGrid .mat').forEach(function(card){
+    var topicOk = curTopic === '全部' || card.getAttribute('data-topic') === curTopic;
+    var textOk = !q || card.getAttribute('data-text').toLowerCase().indexOf(q) >= 0
+      || card.querySelector('.mat-title').textContent.toLowerCase().indexOf(q) >= 0;
+    var show = topicOk && textOk;
+    card.style.display = show ? '' : 'none';
+    if (show) shown++;
+  });
+  var es = document.getElementById('emptyState');
+  if (es) es.style.display = shown ? 'none' : 'grid';
+}
+document.querySelectorAll('#topicChips .chip[data-topic]').forEach(function(chip){
+  chip.addEventListener('click', function(){
+    document.querySelectorAll('#topicChips .chip[data-topic]').forEach(function(c){ c.classList.remove('on'); });
+    chip.classList.add('on');
+    curTopic = chip.getAttribute('data-topic');
+    filterMats(document.querySelector('.search input').value);
+  });
+});
+
+/* 分段控件 */
+function bindSeg(id){
+  var seg = document.getElementById(id);
+  if (!seg) return;
+  seg.querySelectorAll('button').forEach(function(b){
+    b.addEventListener('click', function(){
+      seg.querySelectorAll('button').forEach(function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+    });
+  });
+}
+['taskSeg','modelSeg'].forEach(bindSeg);
+
+function authTab(btn, mode){
+  btn.parentNode.querySelectorAll('button').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on');
+  var submit = document.querySelector('#screen-auth .btn.primary');
+  if (submit) submit.textContent = mode === 'register' ? '注册并开始试用' : '登录并继续';
+}
+
+/* 发送追问 */
+function sendMsg(){
+  var box = document.getElementById('composer');
+  var text = (box.value || '').trim();
+  if (!text) { toast('先写一句要改什么'); return; }
+  var thread = document.getElementById('thread');
+  var wrap = document.createElement('div');
+  wrap.className = 'msg-user';
+  wrap.innerHTML = '<div class="q"></div><div class="conds"><span>条件已更新</span></div>';
+  wrap.querySelector('.q').textContent = text;
+  thread.appendChild(wrap);
+
+  var reply = document.createElement('div');
+  reply.innerHTML = '<div class="role"><span class="ai">智</span>助手 · 重排中</div>' +
+    '<div class="acard"><div class="skel" style="width:74%"></div>' +
+    '<div class="skel" style="width:92%;margin-top:8px"></div>' +
+    '<div class="skel" style="width:58%;margin-top:8px"></div>' +
+    '<div class="row" style="margin-top:12px;align-items:center">' +
+    '<button class="btn quiet sm" onclick="toast(\'已取消生成\')">取消生成</button>' +
+    '<span style="font-size:11px;color:var(--faint)">已用 6s · 30s 超时会自动换模型</span></div></div>';
+  thread.appendChild(reply);
+  box.value = '';
+  thread.scrollTop = thread.scrollHeight;
+
+  setTimeout(function(){
+    reply.innerHTML = '<div class="role"><span class="ai">智</span>助手 · 已重排</div>' +
+      '<div class="acard"><h5>已按新条件重排 <span class="badge ok">v3</span></h5>' +
+      '<div style="font-size:12.5px;color:var(--muted);line-height:1.65">' +
+      '时长与顺序已跟着改，保留项仍在。旧版没有覆盖已存方案。</div>' +
+      '<div class="row" style="margin-top:11px">' +
+      '<button class="btn primary sm" onclick="toast(\'已保存到我的方案\')">保存为方案</button>' +
+      '<button class="btn quiet sm" onclick="go(\'detail\')">看出处</button></div></div>';
+    thread.scrollTop = thread.scrollHeight;
+  }, 900);
+}
+
+/* Toast */
+var toastTimer = null;
+function toast(msg){
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function(){ el.classList.remove('show'); }, 2100);
+}
+
+/* 浮层菜单 */
+function popAt(btn, items){
+  var pop = document.getElementById('pop');
+  pop.innerHTML = '';
+  items.forEach(function(it){
+    if (it.divider){ pop.appendChild(document.createElement('hr')); return; }
+    var b = document.createElement('button');
+    b.textContent = it.label;
+    if (it.danger) b.className = 'danger';
+    b.onclick = function(ev){ ev.stopPropagation(); popHide(); if (it.run) it.run(); };
+    pop.appendChild(b);
+  });
+  var r = btn.getBoundingClientRect();
+  pop.classList.add('show');
+  var w = pop.offsetWidth, h = pop.offsetHeight;
+  var left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
+  var top = r.bottom + 6;
+  if (top + h > window.innerHeight - 8) top = r.top - h - 6;
+  pop.style.left = left + 'px';
+  pop.style.top = Math.max(8, top) + 'px';
+}
+function popHide(){
+  var pop = document.getElementById('pop');
+  if (pop) pop.classList.remove('show');
+}
+document.addEventListener('click', function(e){ if (e.target.closest && !e.target.closest('#pop')) popHide(); });
+
+function openMatMenu(btn){
+  var card = btn.closest('.mat');
+  popAt(btn, [
+    { label: '编辑标题与页码', run: function(){ openDrawer('new'); toast('编辑模式：字段已预填（PATCH /materials/{id}）'); } },
+    { label: '移到其他主题', run: function(){ toast('选个新主题，或直接输入一个'); } },
+    { divider: true },
+    { label: '删除这份材料', danger: true, run: function(){ removeCard(card, '已删除'); } }
+  ]);
+}
+
+function openPlanMenu(btn){
+  var card = btn.closest('.plan');
+  popAt(btn, [
+    { label: '重命名', run: function(){ toast('改名只影响标题，正文与出处不动'); } },
+    { label: '复制一份', run: function(){ toast('已复制为新方案（v1）'); } },
+    { label: '再改一次条件', run: function(){ go('arrange'); } },
+    { divider: true },
+    { label: '删除方案', danger: true, run: function(){ removeCard(card, '方案已删除'); } }
+  ]);
+}
+
+function removeCard(card, msg){
+  if (!card) return;
+  card.classList.add('removing');
+  setTimeout(function(){ card.remove(); refreshSel(); }, 180);
+  toast(msg);
+}
+
+function batchTopic(){
+  var n = document.querySelectorAll('#matGrid .mat.picked').length;
+  if (!n) { toast('先勾几份材料'); return; }
+  toast('已把 ' + n + ' 份材料改为同一主题');
+}
+
+function batchDelete(){
+  var picked = document.querySelectorAll('#matGrid .mat.picked');
+  if (!picked.length) { toast('先勾几份材料'); return; }
+  var n = picked.length;
+  picked.forEach(function(c){ c.classList.add('removing'); });
+  setTimeout(function(){
+    picked.forEach(function(c){ c.remove(); });
+    refreshSel();
+    toast('已删除 ' + n + ' 份材料');
+  }, 190);
+}
+
+function logout(){
+  toast('已退出登录 · 本地不再保留密钥');
+  go('auth');
+}
+
+/* 快捷键：/ 聚焦搜索 */
+document.addEventListener('keydown', function(e){
+  if (e.key === '/' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA'){
+    var s = document.querySelector('#screen-collect .search input');
+    if (s) { e.preventDefault(); s.focus(); }
+  }
+  if (e.key === 'Escape') closeDrawer();
+});
+refreshSel();
+var hash = (location.hash || '').replace('#', '');
+if (SCREENS.indexOf(hash) >= 0) go(hash);
+</script>
+</body>
+</html>
