@@ -1,25 +1,23 @@
 #!/usr/bin/env bash
-# 打线上部署包：解包后目录是扁平的（Dockerfile / app / web / requirements.txt 同级）。
-# 用法：bash 去做/脚本/打包部署包.sh
+# 构建双入口前端，生成可直接用 Docker Compose 启动的部署包。
+# 用法：从仓库根目录运行 bash 脚本/打包部署包.sh
 set -euo pipefail
-ROOT="F:/DSH工作区"
-PROJ="$ROOT/去做"
-STAGE="$ROOT/_tmp/qudeploy"
-NAME="quzuo-deploy-$(date +%Y-%m-%d-%H%M).tar.gz"
-OUT="$PROJ/交付物/$NAME"
+project=$(cd "$(dirname "$0")/.." && pwd)
+pnpm --dir "$project/前端" install --frozen-lockfile
+pnpm --dir "$project/前端" build
 
-rm -rf "$STAGE" && mkdir -p "$STAGE"
-cp -r "$PROJ/后端/app" "$STAGE/app"
-cp -r "$PROJ/后端/web" "$STAGE/web"
-cp "$PROJ/后端/requirements.txt" "$STAGE/"
-cp "$PROJ/Dockerfile.deploy" "$STAGE/Dockerfile"
-cp "$PROJ/docker-compose.yml" "$STAGE/"
-cp "$PROJ/.env.prod" "$STAGE/"
-cp "$PROJ/.env" "$STAGE/"
-find "$STAGE" -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
+temp_dir=$(mktemp -d)
+trap 'rm -rf -- "$temp_dir"' EXIT
+stage="$temp_dir/qudeploy"
+mkdir -p "$stage/web"
+cp -R "$project/后端/app" "$stage/app"
+cp -R "$project/后端/web/dist" "$stage/web/dist"
+cp "$project/后端/requirements.txt" "$project/docker-compose.yml" "$project/.env.prod.example" "$stage/"
+cp "$project/Dockerfile.deploy" "$stage/Dockerfile"
+for config in .env.prod .env; do
+  if [[ -f "$project/$config" ]]; then cp "$project/$config" "$stage/"; fi
+done
 
-tar czf "$OUT" -C "$ROOT/_tmp" qudeploy
-echo "打包完成: $OUT"
-echo "条目数: $(tar -tzf "$OUT" | tr -d '\r' | wc -l)"
-echo "非 ASCII 条目: $(tar -tzf "$OUT" | tr -d '\r' | LC_ALL=C grep -c '[^ -~]' || true)"
-tar -xzOf "$OUT" qudeploy/Dockerfile | grep -E '^COPY|^CMD'
+out="$project/交付物/quzuo-deploy-$(date +%Y-%m-%d-%H%M%S).tar.gz"
+tar --exclude='__pycache__' --exclude='*.pyc' -czf "$out" -C "$temp_dir" qudeploy
+echo "部署包已写入 $out"

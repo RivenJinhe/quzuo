@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app import errors
 from app.config import settings
-from app.db import get_db
+from app.db import begin_write, get_db
 from app.deps import clear_session_cookie, get_account, get_trial, set_session_cookie
 from app.models import Account, AuthToken, TrialUser
 from app.schemas import LoginIn, RegisterIn
@@ -63,6 +63,8 @@ def _trial_out(trial: TrialUser) -> dict:
 def register(body: RegisterIn, request: Request, response: Response,
              db: Session = Depends(get_db)):
     """注册：新建账号与数据身份。本项目要求先注册才能使用，注册前不分配任何匿名身份。"""
+    password_hash = hash_password(body.password)
+    begin_write(db)
     if db.scalar(select(Account).where(Account.username == body.username)) is not None:
         raise errors.ApiError(409, errors.USERNAME_TAKEN, "用户名已被占用", "username")
 
@@ -78,8 +80,7 @@ def register(body: RegisterIn, request: Request, response: Response,
     db.add(trial)
     db.flush()
 
-    acc = Account(username=body.username, password_hash=hash_password(body.password),
-                  trial_user_id=trial.id)
+    acc = Account(username=body.username, password_hash=password_hash, trial_user_id=trial.id)
     db.add(acc)
     db.flush()
 
@@ -100,6 +101,7 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
     if acc is None or not verify_password(body.password, acc.password_hash):
         raise errors.ApiError(401, errors.INVALID_CREDENTIALS, "用户名或密码不正确")
 
+    begin_write(db)
     trial = db.get(TrialUser, acc.trial_user_id)
     if trial is None:
         raise errors.ApiError(500, errors.INTERNAL_ERROR, "账号数据异常，请联系管理员")
@@ -117,6 +119,7 @@ def login(body: LoginIn, request: Request, response: Response, db: Session = Dep
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
     raw = request.cookies.get(settings.cookie_name)
     if raw:
+        begin_write(db)
         tok = db.scalar(select(AuthToken).where(AuthToken.token_hash == hash_token(raw)))
         if tok is not None and tok.revoked_at is None:
             tok.revoked_at = datetime.now(timezone.utc)

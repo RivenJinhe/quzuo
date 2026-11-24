@@ -1,5 +1,13 @@
 # 去做 · 后端容器镜像
 # 供 Hugging Face Spaces (Docker SDK) 使用；本地 docker build 同样可用。
+FROM node:24-bookworm-slim AS frontend
+WORKDIR /build/frontend
+COPY 前端/package.json 前端/pnpm-lock.yaml ./
+RUN npm install --global "$(node --print 'require("./package.json").packageManager')" \
+    && pnpm install --frozen-lockfile
+COPY 前端/ ./
+RUN pnpm build
+
 FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -12,9 +20,9 @@ WORKDIR /app
 COPY 后端/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 应用源码与静态前端（后端启动时把 ./web 挂到 /app 路径，所以两者要同级）
+# FastAPI 从 web/dist 提供产品页和接口测试台。
 COPY 后端/app ./app
-COPY 后端/web ./web
+COPY --from=frontend /build/后端/web/dist ./web/dist
 
 # Hugging Face Spaces 只放行 7860 端口
 EXPOSE 7860

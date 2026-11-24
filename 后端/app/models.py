@@ -1,4 +1,4 @@
-"""数据模型：对齐需求文档 BE-110 ~ BE-165（7 张表）。"""
+"""试用身份、账号和方案生成相关的数据模型。"""
 from __future__ import annotations
 
 import uuid
@@ -6,19 +6,29 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
-    DateTime,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
-    func,
+    Uuid,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
+from app.db_types import (
+    EMPTY_JSON_ARRAY,
+    EMPTY_JSON_OBJECT,
+    EMPTY_UUID_LIST,
+    JSON_DOCUMENT,
+    UTC_NOW,
+    UtcDateTime,
+    UuidList,
+)
+
+
+_ACTIVE_ROW = text("deleted_at IS NULL")
 
 
 def new_uuid() -> uuid.UUID:
@@ -30,12 +40,12 @@ class TrialUser(Base):
 
     __tablename__ = "trial_user"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_uuid)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)   # 可写截止
-    purge_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)     # 只读截止 / 之后 403
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)   # 可写截止
+    purge_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)     # 只读截止 / 之后 403
 
     __table_args__ = (Index("ix_trial_user_expires_at", "expires_at"),)
 
@@ -45,9 +55,9 @@ class Material(Base):
 
     __tablename__ = "material"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_uuid)
     owner_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("trial_user.id", ondelete="CASCADE"), nullable=False
+        Uuid, ForeignKey("trial_user.id", ondelete="CASCADE"), nullable=False
     )
     title: Mapped[str] = mapped_column(String(120), nullable=False)
     topic: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -60,12 +70,12 @@ class Material(Base):
     note: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="citable")  # citable | link_only | unusable
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
 
     __table_args__ = (
-        Index("ix_material_owner_topic", "owner_id", "topic", postgresql_where=text("deleted_at IS NULL")),
+        Index("ix_material_owner_topic", "owner_id", "topic", postgresql_where=_ACTIVE_ROW, sqlite_where=_ACTIVE_ROW),
         Index("ix_material_owner_updated", "owner_id", "updated_at"),
     )
 
@@ -75,21 +85,21 @@ class Conversation(Base):
 
     __tablename__ = "conversation"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_uuid)
     owner_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("trial_user.id", ondelete="CASCADE"), nullable=False
+        Uuid, ForeignKey("trial_user.id", ondelete="CASCADE"), nullable=False
     )
     goal: Mapped[str] = mapped_column(Text, nullable=False)
     task_type: Mapped[str] = mapped_column(String(16), nullable=False)  # review | travel | activity
-    material_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=False, server_default="{}")
-    conditions: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
-    retained: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
-    turns: Mapped[list] = mapped_column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    material_ids: Mapped[list[uuid.UUID]] = mapped_column(UuidList, nullable=False, server_default=EMPTY_UUID_LIST)
+    conditions: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False, server_default=EMPTY_JSON_OBJECT)
+    retained: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False, server_default=EMPTY_JSON_OBJECT)
+    turns: Mapped[list] = mapped_column(JSON_DOCUMENT, nullable=False, server_default=EMPTY_JSON_ARRAY)
     status: Mapped[str] = mapped_column(String(24), nullable=False, server_default="retrieved")
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
 
     __table_args__ = (Index("ix_conversation_owner_created", "owner_id", "created_at"),)
 
@@ -99,30 +109,30 @@ class Generation(Base):
 
     __tablename__ = "generation"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
-    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_uuid)
+    owner_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     conversation_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("conversation.id", ondelete="CASCADE"), nullable=False
+        Uuid, ForeignKey("conversation.id", ondelete="CASCADE"), nullable=False
     )
     conversation_version: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="pending")
     # pending | running | succeeded | failed | cancelled | superseded | timeout | blocked
-    request: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
-    result: Mapped[dict | None] = mapped_column(JSONB)
-    validation: Mapped[dict | None] = mapped_column(JSONB)
+    request: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False, server_default=EMPTY_JSON_OBJECT)
+    result: Mapped[dict | None] = mapped_column(JSON_DOCUMENT)
+    validation: Mapped[dict | None] = mapped_column(JSON_DOCUMENT)
     block_reason: Mapped[str | None] = mapped_column(Text)
     error_code: Mapped[str | None] = mapped_column(String(48))
     error_message: Mapped[str | None] = mapped_column(Text)
     model: Mapped[str | None] = mapped_column(String(80))
     # 单次用量与费用：{model, elapsed_ms, prompt_tokens, completion_tokens, total_tokens, cost_cny}
-    usage: Mapped[dict | None] = mapped_column(JSONB)
+    usage: Mapped[dict | None] = mapped_column(JSON_DOCUMENT)
     # 本次改动影响：与同一对话上一次成功生成相比，时长/环节/物料怎么变了
-    changes: Mapped[list | None] = mapped_column(JSONB)
+    changes: Mapped[list | None] = mapped_column(JSON_DOCUMENT)
     # 条件冲突时给的三个固定选项：[{action, label, effect, send, ...}]
-    options: Mapped[list | None] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    options: Mapped[list | None] = mapped_column(JSON_DOCUMENT)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
     __table_args__ = (Index("ix_generation_conv_created", "conversation_id", "created_at"),)
 
@@ -132,12 +142,12 @@ class Citation(Base):
 
     __tablename__ = "citation"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
-    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_uuid)
+    owner_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     generation_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("generation.id", ondelete="CASCADE"), nullable=False
+        Uuid, ForeignKey("generation.id", ondelete="CASCADE"), nullable=False
     )
-    material_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    material_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     claim_text: Mapped[str] = mapped_column(Text, nullable=False)
     excerpt_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
@@ -147,7 +157,7 @@ class Citation(Base):
     source_page_start: Mapped[int | None] = mapped_column(Integer)
     source_page_end: Mapped[int | None] = mapped_column(Integer)
     material_title: Mapped[str | None] = mapped_column(String(120))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
 
     __table_args__ = (Index("ix_citation_generation", "generation_id", "ordinal"),)
 
@@ -157,21 +167,21 @@ class Plan(Base):
 
     __tablename__ = "plan"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
-    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    conversation_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    generation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_uuid)
+    owner_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    conversation_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    generation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     task_type: Mapped[str] = mapped_column(String(16), nullable=False)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     body: Mapped[str] = mapped_column(Text, nullable=False)
     body_private_note: Mapped[str | None] = mapped_column(Text)
     rationale: Mapped[str | None] = mapped_column(Text)
-    confirmed_conditions: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
-    citation_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=False, server_default="{}")
+    confirmed_conditions: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False, server_default=EMPTY_JSON_OBJECT)
+    citation_ids: Mapped[list[uuid.UUID]] = mapped_column(UuidList, nullable=False, server_default=EMPTY_UUID_LIST)
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
-    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
 
     __table_args__ = (
         Index(
@@ -179,7 +189,8 @@ class Plan(Base):
             "owner_id",
             "conversation_id",
             unique=True,
-            postgresql_where=text("deleted_at IS NULL"),
+            postgresql_where=_ACTIVE_ROW,
+            sqlite_where=_ACTIVE_ROW,
         ),
         Index("ix_plan_owner_updated", "owner_id", "updated_at"),
     )
@@ -190,14 +201,14 @@ class GenerationLog(Base):
 
     __tablename__ = "generation_log"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    conversation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
-    generation_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True, autoincrement=True)
+    owner_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    generation_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     event: Mapped[str] = mapped_column(String(32), nullable=False)
     code: Mapped[str | None] = mapped_column(String(48))
-    detail: Mapped[dict | None] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    detail: Mapped[dict | None] = mapped_column(JSON_DOCUMENT)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
 
     __table_args__ = (Index("ix_generation_log_gen", "generation_id", "created_at"),)
 
@@ -207,14 +218,14 @@ class Account(Base):
 
     __tablename__ = "account"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_uuid)
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     trial_user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("trial_user.id", ondelete="CASCADE"), unique=True, nullable=False
+        Uuid, ForeignKey("trial_user.id", ondelete="CASCADE"), unique=True, nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
 
 
 class AuthToken(Base):
@@ -222,16 +233,16 @@ class AuthToken(Base):
 
     __tablename__ = "auth_token"
 
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=new_uuid)
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_uuid)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     trial_user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("trial_user.id", ondelete="CASCADE"), nullable=False
+        Uuid, ForeignKey("trial_user.id", ondelete="CASCADE"), nullable=False
     )
     account_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("account.id", ondelete="CASCADE"), nullable=True
+        Uuid, ForeignKey("account.id", ondelete="CASCADE"), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(UtcDateTime, server_default=UTC_NOW, nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
 
     __table_args__ = (Index("ix_auth_token_trial_user", "trial_user_id"),)

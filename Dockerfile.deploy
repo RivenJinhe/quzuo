@@ -14,9 +14,9 @@ WORKDIR /app
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
 
-# 应用源码与静态前端（后端启动时把 ./web 挂到 /app 路径，所以两者要同级）
+# 部署包已包含 pnpm 构建产物。
 COPY app ./app
-COPY web ./web
+COPY web/dist ./web/dist
 
 EXPOSE 7860
 

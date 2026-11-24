@@ -73,3 +73,58 @@ def test_does_not_mutate_input() -> None:
     cond = {"items": [{"title": "开场", "minutes": 2}]}
     turns.parse("删掉开场", "activity", cond, {})
     assert len(cond["items"]) == 1
+
+
+def test_travel_conditions_extracted_together_and_deadline_can_change() -> None:
+    first = turns.parse(
+        "四人从美术馆出发，15:15 离馆，去咖啡馆和返校各需十五分钟，"
+        "15:55 前回校，还想喝半小时咖啡，已知人均花费 95 元，人均预算 80 元。",
+        "travel", {}, {},
+    )
+    conditions = first["conditions"]
+    assert conditions["origin"] == "美术馆"
+    assert conditions["destination"] == "学校"
+    assert conditions["stop"] == "咖啡馆"
+    assert (conditions["start_time"], conditions["deadline"], conditions["legs"]) == ("15:15", "15:55", [15, 15])
+    assert (conditions["available_minutes"], conditions["desired_stay_minutes"]) == (10, 30)
+    assert (conditions["people"], conditions["known_cost_per_person"], conditions["budget_per_person"]) == (4, 95, 80)
+    revised = turns.parse("出发时间改为 15:25，最晚 16:05 回校", "travel", conditions, first["retained"])
+    assert (revised["conditions"]["start_time"], revised["conditions"]["deadline"]) == ("15:25", "16:05")
+    assert revised["conditions"]["available_minutes"] == 10
+
+
+def test_activity_total_is_separate_from_the_retained_item_duration() -> None:
+    first = turns.parse(
+        "20 人迎新，桌椅固定，原有 40 分钟现缩到 25 分钟仍想保留 12 分钟的同桌互访",
+        "activity", {}, {},
+    )
+    assert first["conditions"]["total_minutes"] == 25
+    assert first["conditions"]["seating_fixed"] is True
+    assert first["retained"]["fixed_item_minutes"] == {"同桌互访": 12}
+    revised = turns.parse("只剩10分钟", "activity", first["conditions"], first["retained"])
+    assert revised["conditions"]["available_minutes"] == 10
+    assert revised["retained"]["fixed_item_minutes"] == {"同桌互访": 12}
+
+
+def test_relative_example_reference_prefers_a_unique_previous_example() -> None:
+    first = turns.parse(
+        "只剩 5 分钟，保留这道题", "review",
+        {"items": [{"title": "用排练与兼职说明机会成本"}, {"title": "复述定义"},
+                   {"title": "练例题：排练与兼职"}]}, {},
+    )
+    assert first["retained"]["must_keep_texts"] == ["练例题：排练与兼职"]
+    assert first["conditions"]["available_minutes"] == 5
+    ambiguous = turns.parse(
+        "只剩 5 分钟，保留这道例题", "review",
+        {"items": [{"title": "排练例题"}, {"title": "选课例题"}]}, {},
+    )
+    assert not ambiguous["retained"]
+    assert ambiguous["unresolved"]
+
+
+def test_total_budget_is_recomputed_when_people_are_given_later() -> None:
+    first = turns.parse("总预算 640 元", "travel", {}, {})
+    assert "budget_per_person" not in first["conditions"]
+    assert first["unresolved"]
+    revised = turns.parse("我们有八人", "travel", first["conditions"], {})
+    assert revised["conditions"]["budget_per_person"] == 80

@@ -4,8 +4,11 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
+
+from app.services.plan_text import public_sections
 
 TaskType = Literal["review", "travel", "activity"]
 SourceKind = Literal["web", "courseware", "manual"]
@@ -17,42 +20,73 @@ class CamelOut(BaseModel):
 
 
 # ---------- 材料 ----------
+def material_status(excerpt: str, source_url: str | None) -> MaterialStatus:
+    if excerpt.strip():
+        return "citable"
+    return "link_only" if source_url else "unusable"
+
+
+def validate_material_content(
+    excerpt: str, source_kind: SourceKind, source_url: str | None, source_file: str | None, status: MaterialStatus,
+) -> None:
+    if source_url:
+        url = urlsplit(source_url)
+        if url.scheme not in ("http", "https") or not url.hostname or url.username is not None:
+            raise ValueError("来源链接必须是有效的 HTTP 或 HTTPS 网址")
+    if source_kind == "web" and not source_url:
+        raise ValueError("来源为网页时必须给链接")
+    if status == "citable" and not excerpt.strip():
+        raise ValueError("能直接引用的材料必须提供摘录")
+    if status == "link_only" and not source_url:
+        raise ValueError("只能打开看的材料必须提供链接")
+    if not excerpt.strip() and not source_url and not (source_file and status == "unusable"):
+        raise ValueError("请提供摘录、网址或文件来源")
+
+
+def validate_material_pages(start: int | None, end: int | None) -> None:
+    if start is not None and end is not None and end < start:
+        raise ValueError("页码结束不能小于开始")
+
+
 class MaterialCreate(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     topic: str = Field(min_length=1, max_length=40)
-    excerpt: str = Field(min_length=1, max_length=60000)
+    excerpt: str = Field(default="", max_length=60000)
     source_kind: SourceKind = "manual"
     source_url: str | None = Field(default=None, max_length=2000)
     source_file: str | None = Field(default=None, max_length=200)
     source_page_start: int | None = Field(default=None, ge=1, le=9999)
     source_page_end: int | None = Field(default=None, ge=1, le=9999)
     note: str | None = Field(default=None, max_length=500)
-    status: MaterialStatus = "citable"
+    status: MaterialStatus | None = None
 
-    @field_validator("source_page_end")
-    @classmethod
-    def check_page_range(cls, v: int | None) -> int | None:
-        return v
-
-    def model_post_init(self, __context: Any) -> None:
-        if self.source_page_start and self.source_page_end and self.source_page_end < self.source_page_start:
-            raise ValueError("页码结束不能小于开始")
-        if self.source_kind == "web" and not self.source_url:
-            raise ValueError("来源为网页时必须给链接")
+    @model_validator(mode="after")
+    def check_content(self) -> MaterialCreate:
+        self.status = self.status or material_status(self.excerpt, self.source_url)
+        validate_material_content(self.excerpt, self.source_kind, self.source_url, self.source_file, self.status)
+        validate_material_pages(self.source_page_start, self.source_page_end)
+        return self
 
 
 class MaterialUpdate(BaseModel):
     version: int = Field(ge=1)
     title: str | None = Field(default=None, min_length=1, max_length=120)
     topic: str | None = Field(default=None, min_length=1, max_length=40)
-    excerpt: str | None = Field(default=None, min_length=1, max_length=60000)
+    excerpt: str | None = Field(default=None, max_length=60000)
     source_kind: SourceKind | None = None
     source_url: str | None = Field(default=None, max_length=2000)
     source_file: str | None = Field(default=None, max_length=200)
-    source_page_start: int | None = Field(default=None, ge=1)
-    source_page_end: int | None = Field(default=None, ge=1)
+    source_page_start: int | None = Field(default=None, ge=1, le=9999)
+    source_page_end: int | None = Field(default=None, ge=1, le=9999)
     note: str | None = Field(default=None, max_length=500)
     status: MaterialStatus | None = None
+
+    @field_validator("title", "topic", "excerpt", "source_kind", "status")
+    @classmethod
+    def require_value_if_present(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("不能设为空值")
+        return value
 
 
 class MaterialOut(CamelOut):
@@ -104,6 +138,7 @@ class RetrieveOut(BaseModel):
     conversation_id: uuid.UUID
     candidates: list[dict[str, Any]]
     total: int
+    material_limit: int = 20
 
 
 class MaterialRef(BaseModel):
@@ -127,6 +162,7 @@ class TurnIn(BaseModel):
     text: str = Field(min_length=1, max_length=500)
     version: int | None = Field(default=None, ge=1)
     regenerate: bool = True
+    base_generation_id: uuid.UUID | None = None
     model_ids: list[str] | None = Field(default=None, max_length=8)
 
 
@@ -155,13 +191,20 @@ class GenerationOut(CamelOut):
     created_at: datetime
     finished_at: datetime | None
 
+    @computed_field
+    @property
+    def result_sections(self) -> list[dict]:
+        if self.status == "succeeded" and self.result:
+            return public_sections(self.result, self.validation or {})
+        return []
+
 
 # ---------- 方案 ----------
 class PlanIn(BaseModel):
     conversation_id: uuid.UUID
     generation_id: uuid.UUID
     title: str = Field(min_length=1, max_length=200)
-    body: str = Field(min_length=1, max_length=20000)
+    body: str | None = Field(default=None, min_length=1, max_length=20000)
     body_private_note: str | None = Field(default=None, max_length=2000)
     rationale: str | None = Field(default=None, max_length=2000)
     confirmed_conditions: dict[str, Any] = Field(default_factory=dict)

@@ -1,11 +1,17 @@
 # 构建上下文瘦身：这些目录不进镜像
 后端/pgsql17_root
 后端/pgdata
+后端/*.sqlite3
+后端/*.sqlite3-*
 后端/tools
 后端/.venv
 后端/tests
 后端/.pytest_cache
 后端/web_原测试台_20261122
+**/node_modules
+**/dist
+.git
+.env.prod
 
 **/__pycache__
 **/*.pyc

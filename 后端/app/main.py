@@ -5,14 +5,14 @@ import logging
 import uuid as uuidlib
 from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Body, Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from app import errors
 from app.config import settings
-from app.db import get_db
+from app.db import begin_write, get_db, initialize_schema
 from app.deps import get_trial
 from app.models import TrialUser
 from app.services import providers
@@ -20,25 +20,7 @@ from app.routers import auth, citations, conversations, materials, models, plans
 
 logging.basicConfig(level=settings.log_level)
 
-from app.db import Base, engine
-
-Base.metadata.create_all(bind=engine)
-
-
-def _ensure_columns() -> None:
-    """create_all 不会给已有表补字段，这里做一次幂等补列。"""
-    from sqlalchemy import text as _text
-
-    with engine.begin() as conn:
-        conn.execute(_text("ALTER TABLE generation ADD COLUMN IF NOT EXISTS usage JSONB"))
-        conn.execute(_text("ALTER TABLE generation ADD COLUMN IF NOT EXISTS changes JSONB"))
-        conn.execute(_text("ALTER TABLE generation ADD COLUMN IF NOT EXISTS options JSONB"))
-
-
-try:
-    _ensure_columns()
-except Exception as exc:  # noqa: BLE001  数据库暂时不在时不要挡住启动
-    logging.getLogger("qu.main").warning("补列失败（可忽略）：%s", exc)
+initialize_schema()
 
 app = FastAPI(title="去做 API", version="0.1.0")
 app.add_middleware(
@@ -93,7 +75,8 @@ def _dev_local_only(request: Request) -> None:
 def dev_expire(request: Request, tid: uuidlib.UUID, mode: str = "readonly", db: Session = Depends(get_db)):
     """仅本地验收用：把某个试用身份推进到只读或已过期（BE-102）。"""
     _dev_local_only(request)
-    t = db.get(TrialUser, tid)
+    begin_write(db)
+    t = db.get(TrialUser, tid, with_for_update=True)
     if t is None:
         raise errors.ApiError(404, errors.NOT_FOUND, "试用身份不存在")
     now = datetime.now(timezone.utc)
@@ -110,13 +93,15 @@ def dev_expire(request: Request, tid: uuidlib.UUID, mode: str = "readonly", db: 
 
 
 @app.post("/internal/dev/generations/inject")
-def dev_inject(request: Request, payload: dict, db: Session = Depends(get_db)):
+def dev_inject(request: Request, conversation_id: uuidlib.UUID = Body(), result: dict = Body(),
+               db: Session = Depends(get_db)):
     """仅本地验收用：把一份固定结果走真实复核链路（不调模型）。"""
     _dev_local_only(request)
     from app.models import Conversation, Generation, Material
     from app.services.generate import build_payload, finalize_generation
 
-    conv = db.get(Conversation, payload["conversation_id"])
+    begin_write(db)
+    conv = db.get(Conversation, conversation_id, with_for_update=True)
     if conv is None:
         raise errors.ApiError(404, errors.NOT_FOUND, "对话不存在")
     cond = conv.conditions or {}
@@ -132,10 +117,8 @@ def dev_inject(request: Request, payload: dict, db: Session = Depends(get_db)):
     gen = Generation(owner_id=conv.owner_id, conversation_id=conv.id,
                      conversation_version=conv.version, status="running", request={}, model="dev-inject")
     db.add(gen)
-    db.commit()
-    db.refresh(gen)
-    result = payload["result"]
-    validation = finalize_generation(db, gen, result, built, list(mats))
+    db.flush()
+    validation = finalize_generation(db, gen, result, built)
     gen.finished_at = datetime.now(timezone.utc)
     db.commit()
     return {"generation_id": str(gen.id), "status": gen.status, "validation": validation,
@@ -144,12 +127,14 @@ def dev_inject(request: Request, payload: dict, db: Session = Depends(get_db)):
 
 
 @app.post("/internal/dev/generations/pending")
-def dev_pending(request: Request, payload: dict, db: Session = Depends(get_db)):
+def dev_pending(request: Request, conversation_id: uuidlib.UUID = Body(embed=True),
+                db: Session = Depends(get_db)):
     """仅本地验收用：造一条 pending 生成，验证改条件后旧生成作废。"""
     _dev_local_only(request)
     from app.models import Conversation, Generation
 
-    conv = db.get(Conversation, payload["conversation_id"])
+    begin_write(db)
+    conv = db.get(Conversation, conversation_id, with_for_update=True)
     if conv is None:
         raise errors.ApiError(404, errors.NOT_FOUND, "对话不存在")
     gen = Generation(owner_id=conv.owner_id, conversation_id=conv.id,
@@ -159,12 +144,18 @@ def dev_pending(request: Request, payload: dict, db: Session = Depends(get_db)):
     db.refresh(gen)
     return {"generation_id": str(gen.id), "conversation_version": conv.version}
 
-# ---- 前端测试台（静态页面，路径 /app/）----
+# 产品页面由 /app/ 提供，旧链接沿用同一份页面。
 from pathlib import Path as _Path
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
-WEB_DIR = _Path(__file__).resolve().parent.parent / "web"
+WEB_DIR = _Path(__file__).resolve().parent.parent / "web" / "dist"
+
+@app.get("/app/design.html", include_in_schema=False)
+def _design_redirect():
+    return RedirectResponse(url="/app/")
+
+
 if WEB_DIR.is_dir():
     app.mount("/app", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
 

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app import errors
 from app.config import settings
-from app.db import get_db
+from app.db import begin_write, get_db
 from app.models import Account, AuthToken, TrialUser
 from app.security import hash_token
 
@@ -33,6 +33,7 @@ def get_trial(
         raise errors.ApiError(401, errors.UNAUTHENTICATED, "请先注册或登录")
 
     h = hash_token(raw)
+    begin_write(db)
     tok = db.scalar(
         select(AuthToken).where(AuthToken.token_hash == h, AuthToken.revoked_at.is_(None))
     )

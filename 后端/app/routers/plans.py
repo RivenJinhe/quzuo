@@ -5,14 +5,15 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query, Response
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app import errors
-from app.db import get_db
+from app.db import begin_write, get_db
 from app.deps import require_readable, require_writable
-from app.models import Citation, Conversation, Generation, Plan, TrialUser
-from app.schemas import CopyOut, PlanIn, PlanListOut, PlanOut
+from app.models import Citation, Conversation, Generation, Material, Plan, TrialUser
+from app.schemas import ConversationOut, CopyOut, PlanIn, PlanListOut, PlanOut
+from app.services.plan_text import public_body
 
 router = APIRouter(prefix="/api/v1/plans", tags=["plans"])
 
@@ -21,8 +22,10 @@ def _now():
     return datetime.now(timezone.utc)
 
 
-def get_owned_plan(db: Session, trial: TrialUser, pid: uuid.UUID) -> Plan:
-    p = db.get(Plan, pid)
+def get_owned_plan(db: Session, trial: TrialUser, pid: uuid.UUID, *, lock: bool = False) -> Plan:
+    if lock:
+        begin_write(db)
+    p = db.get(Plan, pid, with_for_update=lock, populate_existing=lock)
     if p is None or p.deleted_at is not None or p.owner_id != trial.id:
         raise errors.ApiError(404, errors.NOT_FOUND, "方案不存在")
     return p
@@ -51,7 +54,8 @@ def _citation_public(c: Citation) -> dict:
 def save_plan(payload: PlanIn, response: Response, trial: TrialUser = Depends(require_writable),
               db: Session = Depends(get_db)):
     """BE-250 / BE-251 保存：同一对话重复保存 = 更新原记录。"""
-    conv = db.get(Conversation, payload.conversation_id)
+    begin_write(db)
+    conv = db.get(Conversation, payload.conversation_id, with_for_update=True, populate_existing=True)
     if conv is None or conv.deleted_at is not None or conv.owner_id != trial.id:
         raise errors.ApiError(404, errors.NOT_FOUND, "对话不存在")
     gen = db.get(Generation, payload.generation_id)
@@ -65,18 +69,27 @@ def save_plan(payload: PlanIn, response: Response, trial: TrialUser = Depends(re
                               "generation_id", {"generation_version": gen.conversation_version,
                                                  "conversation_version": conv.version})
 
+    result = gen.result or {}
+    body = payload.body if payload.body is not None else public_body(result, gen.validation or {})
+    if not body.strip():
+        raise errors.ApiError(422, errors.VALIDATION_ERROR, "没有可保存的方案正文", "body")
+    note = payload.body_private_note if "body_private_note" in payload.model_fields_set else result.get("private_note")
+    rationale = payload.rationale if "rationale" in payload.model_fields_set else result.get("rationale")
+    conditions = (payload.confirmed_conditions if "confirmed_conditions" in payload.model_fields_set
+                  else (gen.request or {}).get("conditions", conv.conditions))
     citation_ids = []
     for c in db.scalars(select(Citation).where(Citation.generation_id == gen.id).order_by(Citation.ordinal)).all():
         citation_ids.append(c.id)
 
     existing = db.scalar(
-        select(Plan).where(Plan.owner_id == trial.id, Plan.conversation_id == conv.id, Plan.deleted_at.is_(None))
+        select(Plan).where(Plan.owner_id == trial.id, Plan.conversation_id == conv.id,
+                           Plan.deleted_at.is_(None)).with_for_update()
     )
     if existing is None:
         plan = Plan(
             owner_id=trial.id, conversation_id=conv.id, generation_id=gen.id, task_type=conv.task_type,
-            title=payload.title, body=payload.body, body_private_note=payload.body_private_note,
-            rationale=payload.rationale, confirmed_conditions=payload.confirmed_conditions or {},
+            title=payload.title, body=body, body_private_note=note,
+            rationale=rationale, confirmed_conditions=conditions or {},
             citation_ids=citation_ids,
         )
         db.add(plan)
@@ -86,10 +99,10 @@ def save_plan(payload: PlanIn, response: Response, trial: TrialUser = Depends(re
         plan.generation_id = gen.id
         plan.task_type = conv.task_type
         plan.title = payload.title
-        plan.body = payload.body
-        plan.body_private_note = payload.body_private_note
-        plan.rationale = payload.rationale
-        plan.confirmed_conditions = payload.confirmed_conditions or {}
+        plan.body = body
+        plan.body_private_note = note
+        plan.rationale = rationale
+        plan.confirmed_conditions = conditions or {}
         plan.citation_ids = citation_ids
         plan.version += 1
         plan.updated_at = _now()
@@ -117,10 +130,49 @@ def get_plan(pid: uuid.UUID, trial: TrialUser = Depends(require_readable), db: S
     return get_owned_plan(db, trial, pid)
 
 
+@router.post("/{pid}/resume", response_model=ConversationOut)
+def resume_plan(pid: uuid.UUID, trial: TrialUser = Depends(require_writable), db: Session = Depends(get_db)):
+    """从显式保存的版本恢复编辑条件，后来的未保存草稿不改变方案正文。"""
+    begin_write(db)
+    plan = get_owned_plan(db, trial, pid)
+    conv = db.get(Conversation, plan.conversation_id, with_for_update=True, populate_existing=True)
+    if conv is None or conv.owner_id != trial.id or conv.deleted_at:
+        raise errors.ApiError(404, errors.NOT_FOUND, "原对话不存在")
+    db.refresh(plan, with_for_update=True)
+    if plan.deleted_at:
+        raise errors.ApiError(404, errors.NOT_FOUND, "方案不存在")
+    gen = db.get(Generation, plan.generation_id) if plan.generation_id else None
+    if gen is None or gen.owner_id != trial.id or gen.conversation_id != conv.id:
+        raise errors.ApiError(409, errors.STALE_GENERATION, "找不到这份方案保存时的生成记录")
+    snapshot = gen.request or {}
+    ids = [uuid.UUID(str(mid)) for mid in snapshot.get("material_ids", conv.material_ids or [])]
+    versions = dict(db.execute(select(Material.id, Material.version).where(
+        Material.owner_id == trial.id, Material.id.in_(ids),
+        Material.deleted_at.is_(None), Material.status == "citable",
+    )).all())
+    stored_versions = snapshot.get("material_versions") or {}
+    sources_unchanged = all(mid in versions and versions[mid] == stored_versions.get(str(mid), versions[mid])
+                            for mid in ids)
+    conv.goal = snapshot.get("goal") or conv.goal
+    conv.task_type = plan.task_type
+    conv.material_ids = [mid for mid in ids if mid in versions]
+    conv.conditions = (snapshot.get("conditions") or {}) if plan.confirmed_conditions is None else plan.confirmed_conditions
+    conv.version += 1
+    conv.retained = {**(snapshot.get("retained") or {}), "base_generation_id": str(gen.id),
+                     "base_generation_version": conv.version}
+    conv.status = "confirmed" if ids and sources_unchanged else "retrieved"
+    conv.updated_at = _now()
+    db.execute(update(Generation).where(Generation.conversation_id == conv.id,
+               Generation.status.in_(["pending", "running"])).values(status="superseded", finished_at=_now()))
+    db.commit()
+    db.refresh(conv)
+    return conv
+
+
 @router.patch("/{pid}", response_model=PlanOut)
 def update_plan(pid: uuid.UUID, payload: dict, trial: TrialUser = Depends(require_writable),
                 db: Session = Depends(get_db)):
-    plan = get_owned_plan(db, trial, pid)
+    plan = get_owned_plan(db, trial, pid, lock=True)
     version = payload.get("version")
     if version is None or int(version) != plan.version:
         raise errors.ApiError(409, errors.VERSION_CONFLICT, "这份方案刚被改过，请刷新后再改", "version",
@@ -137,31 +189,19 @@ def update_plan(pid: uuid.UUID, payload: dict, trial: TrialUser = Depends(requir
 
 @router.post("/{pid}/copy", response_model=CopyOut)
 def copy_plan(pid: uuid.UUID, trial: TrialUser = Depends(require_readable), db: Session = Depends(get_db)):
-    """BE-256 复制正文：公开版去掉私人备注与选择理由，只留正文 + 出处。"""
+    """预览和复制使用同一份已存正文，出处元数据仍供个人页面查阅。"""
     plan = get_owned_plan(db, trial, pid)
     cids = [uuid.UUID(str(c)) for c in (plan.citation_ids or [])]
     rows = []
     if cids:
         rows = db.scalars(select(Citation).where(Citation.id.in_(cids)).order_by(Citation.ordinal)).all()
     cites = [_citation_public(c) for c in rows]
-    lines = [plan.body.strip()]
-    if cites:
-        lines.append("")
-        lines.append("出处：")
-        for c in cites:
-            where = c["source_file"] or ""
-            if c["source_page"]:
-                where = "%s 第 %s 页" % (where, c["source_page"]) if where else "第 %s 页" % c["source_page"]
-            if c["jump_url"]:
-                where = where or c["jump_url"]
-                where = "%s（%s）" % (where, c["jump_url"]) if where and c["jump_url"] not in where else where
-            lines.append("- %s —— %s" % (c["excerpt"].strip()[:120], where or c["material_title"] or "材料"))
-    return CopyOut(title=plan.title, text="\n".join(lines), citations=cites)
+    return CopyOut(title=plan.title, text=plan.body, citations=cites)
 
 
 @router.delete("/{pid}", status_code=204)
 def delete_plan(pid: uuid.UUID, trial: TrialUser = Depends(require_writable), db: Session = Depends(get_db)):
-    plan = get_owned_plan(db, trial, pid)
+    plan = get_owned_plan(db, trial, pid, lock=True)
     plan.deleted_at = _now()
     plan.version += 1
     db.commit()
