@@ -610,6 +610,23 @@ h1.title {
   background: rgba(21, 22, 15, 0.32);
   backdrop-filter: blur(2px);
 }
+.material-drop-hint {
+  position: fixed;
+  z-index: 91;
+  inset: 12px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent-soft) 92%, transparent);
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 700;
+}
+.drawer .material-drop-hint {
+  position: absolute;
+}
 .material-editor {
   display: flex;
   flex: 1;
