@@ -135,7 +135,7 @@ def dev_inject(request: Request, payload: dict, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(gen)
     result = payload["result"]
-    validation = finalize_generation(db, gen, result, built, list(mats))
+    validation = finalize_generation(db, gen, result, built)
     gen.finished_at = datetime.now(timezone.utc)
     db.commit()
     return {"generation_id": str(gen.id), "status": gen.status, "validation": validation,
@@ -159,12 +159,18 @@ def dev_pending(request: Request, payload: dict, db: Session = Depends(get_db)):
     db.refresh(gen)
     return {"generation_id": str(gen.id), "conversation_version": conv.version}
 
-# ---- 前端测试台（静态页面，路径 /app/）----
+# 产品页面由 /app/ 提供，旧链接沿用同一份页面。
 from pathlib import Path as _Path
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
 WEB_DIR = _Path(__file__).resolve().parent.parent / "web"
+
+@app.get("/app/design.html", include_in_schema=False)
+def _design_redirect():
+    return RedirectResponse(url="/app/")
+
+
 if WEB_DIR.is_dir():
     app.mount("/app", StaticFiles(directory=str(WEB_DIR), html=True), name="web")
 

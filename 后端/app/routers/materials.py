@@ -13,7 +13,10 @@ from app import errors
 from app.db import get_db
 from app.deps import require_readable, require_writable
 from app.models import Material, TrialUser
-from app.schemas import MaterialCreate, MaterialListOut, MaterialOut, MaterialUpdate
+from app.schemas import (
+    MaterialCreate, MaterialListOut, MaterialOut, MaterialUpdate,
+    material_status, validate_material_content, validate_material_pages,
+)
 from app.services import extract as extractor
 from app.services import fetchlink
 
@@ -34,9 +37,12 @@ def _decode_cursor(cursor: str | None) -> int:
         raise errors.ApiError(422, errors.VALIDATION_ERROR, "游标不合法", "cursor")
 
 
-def get_owned(db: Session, trial: TrialUser, material_id: uuid.UUID) -> Material:
-    m = db.get(Material, material_id)
-    if m is None or m.deleted_at is not None or m.owner_id != trial.id:
+def get_owned(db: Session, trial: TrialUser, material_id: uuid.UUID, *, lock: bool = False) -> Material:
+    stmt = select(Material).where(
+        Material.id == material_id, Material.owner_id == trial.id, Material.deleted_at.is_(None),
+    )
+    m = db.scalar(stmt.with_for_update() if lock else stmt)
+    if m is None:
         raise errors.ApiError(404, errors.NOT_FOUND, "材料不存在")
     return m
 
@@ -63,9 +69,12 @@ def list_materials(
     stmt = select(Material).where(Material.owner_id == trial.id, Material.deleted_at.is_(None))
     if topic:
         stmt = stmt.where(Material.topic == topic)
-    if q:
-        like = "%" + q + "%"
-        stmt = stmt.where(or_(Material.title.ilike(like), Material.excerpt.ilike(like), Material.note.ilike(like)))
+    if q and (keyword := q.strip()):
+        stmt = stmt.where(or_(
+            Material.title.icontains(keyword, autoescape=True),
+            Material.excerpt.icontains(keyword, autoescape=True),
+            Material.note.icontains(keyword, autoescape=True),
+        ))
     offset = _decode_cursor(cursor)
     rows = db.scalars(stmt.order_by(Material.updated_at.desc(), Material.id.desc()).offset(offset).limit(limit + 1)).all()
     has_more = len(rows) > limit
@@ -142,11 +151,28 @@ def get_material(material_id: uuid.UUID, trial: TrialUser = Depends(require_read
 @router.patch("/{material_id}", response_model=MaterialOut)
 def update_material(material_id: uuid.UUID, payload: MaterialUpdate,
                     trial: TrialUser = Depends(require_writable), db: Session = Depends(get_db)):
-    m = get_owned(db, trial, material_id)
+    m = get_owned(db, trial, material_id, lock=True)
     if payload.version != m.version:
         raise errors.ApiError(409, errors.VERSION_CONFLICT, "这条材料已被修改过，请刷新后再改", "version",
                               {"current_version": m.version})
     data = payload.model_dump(exclude_unset=True, exclude={"version"})
+    if data.keys() & {"excerpt", "source_kind", "source_url", "source_file", "status"}:
+        excerpt = data.get("excerpt", m.excerpt)
+        source_kind = data.get("source_kind", m.source_kind)
+        source_url = data.get("source_url", m.source_url)
+        source_file = data.get("source_file", m.source_file)
+        if "status" not in data and (excerpt != m.excerpt or source_url != m.source_url):
+            data["status"] = material_status(excerpt, source_url)
+        try:
+            validate_material_content(excerpt, source_kind, source_url, source_file, data.get("status", m.status))
+        except ValueError as exc:
+            raise errors.ApiError(422, errors.VALIDATION_ERROR, str(exc)) from exc
+    if data.keys() & {"source_page_start", "source_page_end"}:
+        try:
+            validate_material_pages(data.get("source_page_start", m.source_page_start),
+                                    data.get("source_page_end", m.source_page_end))
+        except ValueError as exc:
+            raise errors.ApiError(422, errors.VALIDATION_ERROR, str(exc), "source_page_end") from exc
     for k, val in data.items():
         setattr(m, k, val)
     m.version = m.version + 1
@@ -158,7 +184,7 @@ def update_material(material_id: uuid.UUID, payload: MaterialUpdate,
 
 @router.delete("/{material_id}", status_code=204)
 def delete_material(material_id: uuid.UUID, trial: TrialUser = Depends(require_writable), db: Session = Depends(get_db)):
-    m = get_owned(db, trial, material_id)
+    m = get_owned(db, trial, material_id, lock=True)
     m.deleted_at = datetime.now(timezone.utc)
     m.version = m.version + 1
     db.commit()

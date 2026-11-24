@@ -154,7 +154,7 @@ def extract(filename: str, data: bytes, page_start: int | None = None, page_end:
         body = (text or "").strip()
         if not body:
             continue
-        if page_count > 1:
+        if kind in ("pdf", "pptx"):
             parts.append("<!-- page %d -->\n\n%s" % (start + offset, body))
         else:
             parts.append(body)
