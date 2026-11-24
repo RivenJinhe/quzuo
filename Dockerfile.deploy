@@ -1,0 +1,23 @@
+# 去做 · 后端容器镜像（部署包版）
+# 部署包内目录是扁平的：app/、web/、requirements.txt 与 Dockerfile 同级。
+# 注意：仓库根目录那份 Dockerfile 用 COPY 后端/app，只能以仓库根为 build context 时用。
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# psycopg[binary] 自带 libpq / libssl，无需 apt 安装系统依赖
+# 国内机器直连 pypi 会卡死，固定走阿里云镜像源
+COPY requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ -r requirements.txt
+
+# 应用源码与静态前端（后端启动时把 ./web 挂到 /app 路径，所以两者要同级）
+COPY app ./app
+COPY web ./web
+
+EXPOSE 7860
+
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}"]

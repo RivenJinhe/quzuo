@@ -1,13 +1,13 @@
-# 去做 · 前端 UI 设计原型 v0.1
+# 去做 · 前端 UI 设计原型 v0.2
 
-日期：2026-11-22　｜　对应后端：qu-backend-20261121（未改动任何后端文件）
+日期：2026-11-23　｜　对应后端：已改为「必须注册才能用」（app/deps.py 强制登录态），纯后端 zip 未改动
 依据：PRD v0.2.4（5.2 页面与流程）+ 后端 app/schemas.py、app/routers/* 实际契约
 
 ## 1. 文件
 
 | 文件 | 说明 |
 | --- | --- |
-| `去做_前端UI设计原型_v0.1.html` | 单文件可交互原型，双击用 Chrome/Edge 打开即可点。内联 CSS + 原生 JS，无构建、无框架、无网络依赖（除 Google Fonts，离线时自动回退系统字体）。 |
+| `去做_前端UI设计原型_v0.2.html` | 单文件可交互原型，双击用 Chrome/Edge 打开即可点。内联 CSS + 原生 JS，无构建、无框架、无网络依赖（除 Google Fonts，离线时自动回退系统字体）。 |
 | `design-tokens.css` | 原型外观依赖的 token 文件，必须与 html 同目录。 |
 
 原型用来定版式、文案、状态与交互路径；不是可发布代码，未接任何真实请求。
@@ -22,7 +22,7 @@
 | screen-arrange | 做个安排 | 5.2.2 | 左对话流四步（说任务→确认材料→生成→改与存）+ 右结果栏（模型切换、条目、时间轴、复核、保存） |
 | screen-plans | 我的方案 | 5.2.3 | 方案卡列表，⋯ 菜单：重命名/复制/再改条件/删除 |
 | screen-detail | 方案详情 | 5.2.3 | 公开正文 + 私人备注（琥珀，标注不随公开版复制）+ 条件 chips + 选择理由 + 右栏出处快照 |
-| screen-auth | 登录/注册 | 附录 A | 试用与账号语义说明，登录/注册双 tab |
+| screen-auth | 登录/注册 | 附录 A | **初始屏**（登录墙）。未登录时任何导航都被拦回这里；登录/注册双 tab |
 | screen-mobile | 手机端 | 5.3 | 三屏 300px 展示：收藏 / 对话 / 方案 |
 
 ## 3. 交互 → 接口映射
@@ -76,7 +76,9 @@
 
 `POST /auth/register`、`POST /auth/login`、`POST /auth/logout`、`GET /auth/me`（cookie 会话）。
 
-试用语义按后端实现（app/routers/auth.py `_extend_trial`）：匿名试用 30 天，到期转只读，再过 7 天清理；**注册或登录后不再计时**。原模板里「注册后自动开 30 天试用」的说法与后端矛盾，已按实现改写。
+**必须注册或登录才能使用**（后端已改，app/deps.py 的 `get_trial` 不再自动建匿名身份：无 cookie → 401 UNAUTHENTICATED「请先注册或登录」；token 失配或 `account_id` 为空 → 401「登录状态已失效，请重新登录」）。原「匿名试用 30 天」的语义已废弃，`POST /auth/register` 现在直接新建有效期 36500 天的身份并下发会话 cookie。`GET /auth/me` 未登录返回 `{"logged_in":false,"account":null,"trial":null}`，可当登录态探针用。
+
+前端对应实现：`go(id)` 顶部拦未登录跳转，`submitAuth()` 做本地校验后 `signIn()` 切换 UI；接真接口时把 `signIn(name)` 换成 `POST /auth/register` / `POST /auth/login` 的响应处理即可，其余屏幕不用改。
 
 ## 4. 界面上写死的硬规则
 
@@ -105,7 +107,41 @@
 
 ## 6. 已知限制
 
-- 未接真实接口，所有数据为演示常量（微积分复习 / 周末返校 / 社团招新三个场景）。
+- 未接真实接口。v0.2 起**空库起步，无任何预置数据**（原微积分复习 / 周末返校 / 社团招新三个演示场景已全部删除），各屏展示的是真实空态。
 - 图标为内联 SVG 几何图形，无图标库依赖；无暗色模式。
 - 本机 Chrome/Edge 在沙箱内起不来（mojo/crashpad 拒权），渲染只在 DSH Design 面板预览和人眼确认，没有自动化截图回归。
 - 移动端只做了展示屏，未做真实响应式交互实现。
+
+## 7. v0.2 变更（2026-11-23）
+
+配合后端「必须注册才能用」的改造，前端同步做了两件事。
+
+**一、加登录墙**
+
+- 初始屏改为 `screen-auth`（`go(loggedIn ? 'collect' : 'auth')`）。
+- `go(id)` 顶部加门禁：`if (!loggedIn && id !== 'auth') { toast('请先注册或登录'); id = 'auth' }`。
+- 删除原「先不登录，用试用身份看看」按钮。
+- `submitAuth()` 只做本地校验（用户名 ≥3 位、密码 ≥8 位），通过后 `signIn(u)` 切换侧栏账号区、显示退出按钮、进收藏页。
+- 退出登录：`logout()` 复位 `loggedIn` 并回到 auth 屏。
+
+**二、清空全部 demo 预置内容**
+
+| 位置 | 原内容 | 现状态 |
+| --- | --- | --- |
+| 侧栏 nav 计数 | 全部 6 / 3 / 1 / 1 | 全部 0 |
+| 侧栏试用块 | 「匿名试用 30 天」提示 | 整块删除 |
+| 侧栏账号区 | 匿名试用身份 | `#accountName`「未登录」+ `#accountSub`「注册后开始使用」+`#accountAvatar`「未」，`#logoutBtn` 隐藏 |
+| 收藏屏 | 6 张真实材料卡（课件第 8–11 页、导师备注、自习室预约等） | `#matGrid` 清空 + `#emptyFirst`「还没有材料」 |
+| 安排屏 | 「对话 #A7F2」+ 完整四步对话流 + 结果栏 4 条条目/时间轴/八项复核 | 删 badge、steps 全 pending、`#threadEmpty`「说一句要安排什么」+ 三个引导按钮、右栏空态 |
+| 方案屏 | 3 张方案卡（复习/出行/活动） | `#planGrid` 清空 + `#planEmpty`「还没有方案」 |
+| 方案详情 | 完整正文 + 条件 + 私人备注 + 出处快照 | 整屏空态「还没有选中的方案」+ 返回按钮 |
+| 手机端 | 三屏演示内容 | 三个空态 |
+| 材料抽屉 | 预填的标题/链接/页码/摘录 | 全部清空，Markdown 预览改为占位说明 |
+
+**三、新增/改写的前端函数**
+
+`loggedIn` / `authMode` 状态、`signIn(name)`、`updateAccount()`、`submitAuth()`、`fillComposer(txt)`、`logout()`（已存在，语义改为回 auth 屏）、`filterMats(q)`（重写：零结果显示 `#emptyFirst`，否则切换 `#emptyState` 并同步 `#gridCount` 文案）、`sendMsg()`（发送时隐藏 `#threadEmpty`）。
+
+**四、校验**
+
+静态检查全绿：65516 字节 / 1207 行、div 190/190、section 6/6、script 语法通过、无缺失 id、无未定义函数、初始 active 屏为 `screen-auth`、`hasTrial=false`、`hasLin=false`（旧试用文案与旧演示数据均已无残留）。

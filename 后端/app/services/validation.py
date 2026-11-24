@@ -177,7 +177,7 @@ def check_duration(result, ctx):
                     for i in items
                 ],
             },
-            "options": _relax_options(items, required, int(available)),
+            "options": _relax_options(items, total, required, int(available)),
         }
     if total > available:
         return {
@@ -185,28 +185,38 @@ def check_duration(result, ctx):
             "ok": False,
             "level": NOTICE,
             "detail": {"total": total, "available": int(available), "diff": total - int(available)},
-            "options": _relax_options(items, total, int(available)),
+            "options": _relax_options(items, total, total, int(available)),
         }
     return {"code": "DURATION_TOTAL", "ok": True, "level": OK, "detail": {"total": total, "available": int(available)}}
 
 
-def _relax_options(items, need, available):
+_MAX_OPTIONS = 3
+
+
+def _relax_options(items, total, need, available):
+    """冲突时给固定选项（PRD 4.4 第六条）：最多三个，每个都写清后果和点下去该说什么。"""
     opts = []
-    for i in items:
-        if i.get("must_keep"):
-            continue
+    cut = [i for i in items if not i.get("must_keep") and _minutes(i) > 0]
+    cut.sort(key=_minutes, reverse=True)
+    for i in cut[:2]:
+        save = _minutes(i)
         opts.append({
             "action": "remove_item",
             "title": i.get("title"),
-            "save_minutes": _minutes(i),
-            "label": "删掉「%s」，省 %d 分钟" % (i.get("title"), _minutes(i)),
+            "save_minutes": save,
+            "label": "删掉「%s」" % i.get("title"),
+            "effect": "省 %d 分钟，总时长 %d → %d" % (save, total, max(0, total - save)),
+            "send": "把「%s」这个环节删掉" % i.get("title"),
         })
+    extra = max(0, need - available)
     opts.append({
         "action": "extend_available",
-        "extra_minutes": need - available,
-        "label": "把总时长放宽 %d 分钟" % (need - available),
+        "extra_minutes": extra,
+        "label": "时间放宽 %d 分钟" % extra,
+        "effect": "内容不动，时间预算 %d → %d 分钟" % (available, need),
+        "send": "时间放宽一些，按 %d 分钟安排" % need,
     })
-    return opts
+    return opts[:_MAX_OPTIONS]
 
 
 # ---------- V3 物料随环节派生 ----------

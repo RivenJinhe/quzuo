@@ -20,7 +20,7 @@ class CamelOut(BaseModel):
 class MaterialCreate(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     topic: str = Field(min_length=1, max_length=40)
-    excerpt: str = Field(min_length=1, max_length=20000)
+    excerpt: str = Field(min_length=1, max_length=60000)
     source_kind: SourceKind = "manual"
     source_url: str | None = Field(default=None, max_length=2000)
     source_file: str | None = Field(default=None, max_length=200)
@@ -45,7 +45,7 @@ class MaterialUpdate(BaseModel):
     version: int = Field(ge=1)
     title: str | None = Field(default=None, min_length=1, max_length=120)
     topic: str | None = Field(default=None, min_length=1, max_length=40)
-    excerpt: str | None = Field(default=None, min_length=1, max_length=20000)
+    excerpt: str | None = Field(default=None, min_length=1, max_length=60000)
     source_kind: SourceKind | None = None
     source_url: str | None = Field(default=None, max_length=2000)
     source_file: str | None = Field(default=None, max_length=200)
@@ -149,6 +149,9 @@ class GenerationOut(CamelOut):
     block_reason: str | None
     error_code: str | None
     error_message: str | None
+    usage: dict[str, Any] | None = None
+    changes: list[Any] | None = None
+    options: list[Any] | None = None
     created_at: datetime
     finished_at: datetime | None
 

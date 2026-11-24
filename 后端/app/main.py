@@ -24,6 +24,22 @@ from app.db import Base, engine
 
 Base.metadata.create_all(bind=engine)
 
+
+def _ensure_columns() -> None:
+    """create_all 不会给已有表补字段，这里做一次幂等补列。"""
+    from sqlalchemy import text as _text
+
+    with engine.begin() as conn:
+        conn.execute(_text("ALTER TABLE generation ADD COLUMN IF NOT EXISTS usage JSONB"))
+        conn.execute(_text("ALTER TABLE generation ADD COLUMN IF NOT EXISTS changes JSONB"))
+        conn.execute(_text("ALTER TABLE generation ADD COLUMN IF NOT EXISTS options JSONB"))
+
+
+try:
+    _ensure_columns()
+except Exception as exc:  # noqa: BLE001  数据库暂时不在时不要挡住启动
+    logging.getLogger("qu.main").warning("补列失败（可忽略）：%s", exc)
+
 app = FastAPI(title="去做 API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,

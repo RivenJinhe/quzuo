@@ -36,8 +36,10 @@ class Settings(BaseSettings):
 
     # 限流与限额（BE-401 / BE-200）
     gen_rate_per_minute: int = 6
+    # 模型单价覆盖（元/百万 token），格式 "model_id:输入价,输出价;..."；留空则只记用量不算钱。
+    llm_prices: str = ""
     max_materials_per_generation: int = 20
-    max_excerpt_codepoints: int = 12000
+    max_excerpt_codepoints: int = 40000
     max_conditions_codepoints: int = 3000
     max_retained_codepoints: int = 2000
     max_pending_facts_codepoints: int = 1000

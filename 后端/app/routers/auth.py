@@ -61,23 +61,29 @@ def _trial_out(trial: TrialUser) -> dict:
 
 @router.post("/register", status_code=201)
 def register(body: RegisterIn, request: Request, response: Response,
-             trial: TrialUser = Depends(get_trial), db: Session = Depends(get_db)):
-    """注册：把当前浏览器的匿名身份直接升级为账号，已存的材料和方案不丢。"""
-    existing = db.scalar(select(Account).where(Account.trial_user_id == trial.id))
-    if existing is not None:
-        raise errors.ApiError(409, errors.ALREADY_ACCOUNT, "当前浏览器已绑定账号，请直接登录")
+             db: Session = Depends(get_db)):
+    """注册：新建账号与数据身份。本项目要求先注册才能使用，注册前不分配任何匿名身份。"""
     if db.scalar(select(Account).where(Account.username == body.username)) is not None:
         raise errors.ApiError(409, errors.USERNAME_TAKEN, "用户名已被占用", "username")
+
+    now = datetime.now(timezone.utc)
+    raw = new_token()
+    trial = TrialUser(
+        token_hash=hash_token(raw),
+        created_at=now,
+        last_seen_at=now,
+        expires_at=now + timedelta(days=36500),
+        purge_at=now + timedelta(days=36507),
+    )
+    db.add(trial)
+    db.flush()
 
     acc = Account(username=body.username, password_hash=hash_password(body.password),
                   trial_user_id=trial.id)
     db.add(acc)
     db.flush()
 
-    raw = new_token()
     db.add(AuthToken(token_hash=hash_token(raw), trial_user_id=trial.id, account_id=acc.id))
-    trial.token_hash = hash_token(raw)
-    _extend_trial(trial)
     db.commit()
     db.refresh(acc)
 
@@ -120,10 +126,14 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)):
 
 
 @router.get("/me")
-def auth_me(request: Request, trial: TrialUser = Depends(get_trial), db: Session = Depends(get_db)):
+def auth_me(request: Request, db: Session = Depends(get_db)):
+    """登录态探针：未登录返回 logged_in=false，不报 401，方便前端决定跳不跳登录页。"""
     acc = get_account(request, db)
+    if acc is None:
+        return {"logged_in": False, "account": None, "trial": None}
+    trial = db.get(TrialUser, acc.trial_user_id)
     return {
-        "logged_in": acc is not None,
-        "account": _account_out(acc) if acc is not None else None,
-        "trial": _trial_out(trial),
+        "logged_in": True,
+        "account": _account_out(acc),
+        "trial": _trial_out(trial) if trial is not None else None,
     }

@@ -15,6 +15,7 @@ from app.deps import require_readable, require_writable
 from app.models import Material, TrialUser
 from app.schemas import MaterialCreate, MaterialListOut, MaterialOut, MaterialUpdate
 from app.services import extract as extractor
+from app.services import fetchlink
 
 router = APIRouter(prefix="/api/v1/materials", tags=["materials"])
 
@@ -112,6 +113,24 @@ async def extract_file(
         return extractor.extract(file.filename or "材料", data, page_start, page_end)
     except extractor.ExtractError as exc:
         status_map = {"UNSUPPORTED_FILE_TYPE": 415, "PAYLOAD_TOO_LARGE": 413, "VALIDATION_ERROR": 422}
+        raise errors.ApiError(status_map.get(exc.code, 422), exc.code, exc.message)
+
+
+@router.post("/fetch")
+def fetch_link(payload: dict, trial: TrialUser = Depends(require_writable)):
+    """抓网页正文给用户确认（不落库、不联网搜索、抓不到就提示手动粘贴）。"""
+    url = str(payload.get("url") or "").strip()
+    try:
+        return fetchlink.fetch_url(url)
+    except fetchlink.FetchError as exc:
+        status_map = {
+            "FETCH_INVALID_URL": 422,
+            "FETCH_BLOCKED": 403,
+            "FETCH_TIMEOUT": 504,
+            "FETCH_UNSUPPORTED": 415,
+            "FETCH_EMPTY": 422,
+            "FETCH_FAILED": 422,
+        }
         raise errors.ApiError(status_map.get(exc.code, 422), exc.code, exc.message)
 
 

@@ -114,6 +114,12 @@ class Generation(Base):
     error_code: Mapped[str | None] = mapped_column(String(48))
     error_message: Mapped[str | None] = mapped_column(Text)
     model: Mapped[str | None] = mapped_column(String(80))
+    # 单次用量与费用：{model, elapsed_ms, prompt_tokens, completion_tokens, total_tokens, cost_cny}
+    usage: Mapped[dict | None] = mapped_column(JSONB)
+    # 本次改动影响：与同一对话上一次成功生成相比，时长/环节/物料怎么变了
+    changes: Mapped[list | None] = mapped_column(JSONB)
+    # 条件冲突时给的三个固定选项：[{action, label, effect, send, ...}]
+    options: Mapped[list | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -8,7 +8,7 @@ from pathlib import Path
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_PAGES = 300
-MAX_CHARS = 20000
+MAX_CHARS = 60000
 
 TEXT_SUFFIXES = {".txt", ".md", ".markdown", ".csv"}
 
@@ -121,7 +121,7 @@ def _pages_text(data: bytes) -> list[str]:
 def extract(filename: str, data: bytes, page_start: int | None = None, page_end: int | None = None) -> dict:
     """返回 {source_file, kind, page_count, page_start, page_end, chars, excerpt, truncated, suggested_title, pages}。
 
-    excerpt / markdown 是同一份 Markdown 文本（超过 20000 字截断），前端下载 .md 与存材料都用它。
+    excerpt / markdown 是同一份 Markdown 文本（超过 60000 字截断），前端下载 .md 与存材料都用它。
     """
     if not data:
         raise ExtractError("VALIDATION_ERROR", "文件是空的")

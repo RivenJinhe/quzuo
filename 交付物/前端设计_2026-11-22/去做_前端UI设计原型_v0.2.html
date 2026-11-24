@@ -443,13 +443,13 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
     </div>
     <div class="nav-label">工作区</div>
     <button class="nav-item active" data-goto="collect" onclick="go('collect')">
-      <i class="dot"></i><span class="lbl">我的收藏</span><span class="count">6</span>
+      <i class="dot"></i><span class="lbl">我的收藏</span><span class="count">0</span>
     </button>
     <button class="nav-item" data-goto="arrange" onclick="go('arrange')">
-      <i class="dot"></i><span class="lbl">做个安排</span><span class="count">进行中</span>
+      <i class="dot"></i><span class="lbl">做个安排</span><span class="count">0</span>
     </button>
     <button class="nav-item" data-goto="plans" onclick="go('plans')">
-      <i class="dot"></i><span class="lbl">我的方案</span><span class="count">3</span>
+      <i class="dot"></i><span class="lbl">我的方案</span><span class="count">0</span>
     </button>
     <div class="nav-label" style="margin-top:10px">设计预览</div>
     <button class="nav-item" onclick="go('auth')"><i class="dot"></i><span class="lbl">登录 / 注册</span></button>
@@ -457,27 +457,21 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
     <button class="nav-item" onclick="go('mobile')"><i class="dot"></i><span class="lbl">手机端</span></button>
 
     <div class="sidebar-foot">
-      <div class="trial">
-        <div class="trial-top"><span>试用期剩余</span><span class="mono">11-21</span></div>
-        <div class="trial-days">9 <span style="font-size:11px;color:var(--muted);font-family:var(--sans)">天</span></div>
-        <div class="bar"><i style="width:30%"></i></div>
-        <div style="font-size:11px;color:var(--faint);margin-top:7px">12-21 转只读 · 12-28 清理</div>
-      </div>
-      <div class="account" onclick="go('auth')">
-        <div class="avatar">林</div>
+      <div class="account" id="accountBox" onclick="go('auth')">
+        <div class="avatar" id="accountAvatar">未</div>
         <div class="account-text">
-          <div class="account-name">林同学</div>
-          <div class="account-sub">试用账号 · 未绑定</div>
+          <div class="account-name" id="accountName">未登录</div>
+          <div class="account-sub" id="accountSub">注册后开始使用</div>
         </div>
       </div>
-      <button class="btn quiet sm" style="width:100%;margin-top:7px" onclick="logout()">退出登录</button>
+      <button class="btn quiet sm" style="width:100%;margin-top:7px" id="logoutBtn" onclick="logout()" hidden>退出登录</button>
     </div>
   </aside>
 
   <main class="main">
 
     <!-- ================= 屏幕 1：我的收藏 ================= -->
-    <section class="screen active" id="screen-collect">
+    <section class="screen" id="screen-collect">
       <div class="pad">
         <div class="page-head">
           <div>
@@ -498,131 +492,41 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
             <span class="kbd">/</span>
           </label>
           <div class="chips" id="topicChips">
-            <button class="chip on" data-topic="全部">全部<span class="n">6</span></button>
-            <button class="chip" data-topic="复习">复习<span class="n">3</span></button>
-            <button class="chip" data-topic="出行">出行<span class="n">1</span></button>
-            <button class="chip" data-topic="活动">活动<span class="n">1</span></button>
-            <button class="chip" data-topic="其他">其他<span class="n">1</span></button>
-            <button class="chip" onclick="toast('主题是你自己起的名字，比如「毕业论文」「社团」')">＋ 新主题</button>
+            <button class="chip on" data-topic="全部">全部<span class="n">0</span></button>
+            <button class="chip" data-topic="复习">复习<span class="n">0</span></button>
+            <button class="chip" data-topic="出行">出行<span class="n">0</span></button>
+            <button class="chip" data-topic="活动">活动<span class="n">0</span></button>
+            <button class="chip" onclick="toast('主题是材料自带的，这里会自动汇总你用过的主题')">＋ 新主题</button>
           </div>
           <div class="spacer"></div>
           <button class="btn quiet sm">按更新时间 ↓</button>
         </div>
 
+        <div class="empty" id="emptyFirst" style="display:grid">
+          <div class="empty-ic">收</div>
+          <b>还没有材料</b>
+          <p>先把课件、通知或手记收进来。做安排时只会检索这里的材料，每句话都能点回出处。</p>
+          <div class="row" style="justify-content:center">
+            <button class="btn" onclick="openDrawer('upload')">↑ 上传 PDF / 文档</button>
+            <button class="btn primary" onclick="openDrawer('new')">＋ 新增材料</button>
+          </div>
+        </div>
+
         <div class="empty" id="emptyState" style="display:none">
           <div class="empty-ic">⌕</div>
           <b>没有匹配的材料</b>
-          <p>换个词试试，或把主题切回「全部」。也可以现在就补一份——手打一段摘录最省事，不用等文件解析。</p>
+          <p>换个词试试，或把主题切回「全部」。</p>
           <div class="row" style="justify-content:center">
             <button class="btn" onclick="document.querySelector('.search input').value='';filterMats('')">清除搜索</button>
             <button class="btn primary" onclick="openDrawer('new')">＋ 新增材料</button>
           </div>
         </div>
 
-        <div class="grid-materials" id="matGrid">
-          <article class="mat" data-topic="复习" data-text="第十章 复习重点与题型分布 课件 积分 级数 常考">
-            <div class="mat-top">
-              <span class="check"></span><button class="mat-more" title="编辑 / 删除" onclick="event.stopPropagation();openMatMenu(this)">⋯</button>
-              <div>
-                <div class="mat-title">第十章 复习重点与题型分布</div>
-                <div class="mat-excerpt">级数收敛判别与积分换序是本次大题重点，选择填空覆盖…常考的三种题型：判敛、求和、应用。</div>
-              </div>
-            </div>
-            <div class="mat-foot">
-              <span class="badge topic">复习</span>
-              <span class="badge kind">课件</span>
-              <span>第 8–11 页</span>
-              <span class="meta-dot"></span>
-              <span>2 小时前</span>
-            </div>
-          </article>
+        <div class="grid-materials" id="matGrid"></div>
 
-          <article class="mat" data-topic="复习" data-text="期中范围说明与评分构成 网页 教务 通知 平时分">
-            <div class="mat-top">
-              <span class="check"></span><button class="mat-more" title="编辑 / 删除" onclick="event.stopPropagation();openMatMenu(this)">⋯</button>
-              <div>
-                <div class="mat-title">期中范围说明与评分构成</div>
-                <div class="mat-excerpt">第 1–9 章全考，不带计算器。平时 30% + 期中 30% + 期末 40%，缺勤三次以上扣总评。</div>
-              </div>
-            </div>
-            <div class="mat-foot">
-              <span class="badge topic">复习</span>
-              <span class="badge kind">网页</span>
-              <span class="badge warn">仅跳转</span>
-              <span class="meta-dot"></span>
-              <span>昨天</span>
-            </div>
-          </article>
-
-          <article class="mat" data-topic="复习" data-text="导师备注 错题集中在积分 手记">
-            <div class="mat-top">
-              <span class="check"></span><button class="mat-more" title="编辑 / 删除" onclick="event.stopPropagation();openMatMenu(this)">⋯</button>
-              <div>
-                <div class="mat-title">导师备注：错题集中在积分与级数</div>
-                <div class="mat-excerpt">上次答疑说到第 7、8 章错了 6 道，都是换元后忘记回代。建议先重做课后 7.3、8.1。</div>
-              </div>
-            </div>
-            <div class="mat-foot">
-              <span class="badge topic">复习</span>
-              <span class="badge kind">手记</span>
-              <span class="meta-dot"></span>
-              <span>3 天前</span>
-            </div>
-          </article>
-
-          <article class="mat" data-topic="出行" data-text="周末返校 高铁 地铁 换乘 打车 时间">
-            <div class="mat-top">
-              <span class="check"></span><button class="mat-more" title="编辑 / 删除" onclick="event.stopPropagation();openMatMenu(this)">⋯</button>
-              <div>
-                <div class="mat-title">周末返校：高铁 + 地铁换乘记录</div>
-                <div class="mat-excerpt">16:15 那班 47 分钟到南站，地铁 2 号线转 1 号线约 35 分钟，赶 18:00 前到宿舍要留 10 分钟步行。</div>
-              </div>
-            </div>
-            <div class="mat-foot">
-              <span class="badge topic">出行</span>
-              <span class="badge kind">手记</span>
-              <span class="meta-dot"></span>
-              <span>5 天前</span>
-            </div>
-          </article>
-
-          <article class="mat" data-topic="活动" data-text="社团招新 活动流程 模板 docx 签到 物料">
-            <div class="mat-top">
-              <span class="check"></span><button class="mat-more" title="编辑 / 删除" onclick="event.stopPropagation();openMatMenu(this)">⋯</button>
-              <div>
-                <div class="mat-title">社团招新活动流程模板</div>
-                <div class="mat-excerpt">签到 → 开场 5 分钟 → 三个摊位轮转（每摊 12 分钟）→ 答疑 → 合影。物料含签到表、贴纸 200 张、桌牌 6 个。</div>
-              </div>
-            </div>
-            <div class="mat-foot">
-              <span class="badge topic">活动</span>
-              <span class="badge kind">文件</span>
-              <span class="badge ok">已转 Markdown</span>
-              <span class="meta-dot"></span>
-              <span>上周</span>
-            </div>
-          </article>
-
-          <article class="mat" data-topic="其他" data-text="图书馆 自习室 开放 时段 网页">
-            <div class="mat-top">
-              <span class="check"></span><button class="mat-more" title="编辑 / 删除" onclick="event.stopPropagation();openMatMenu(this)">⋯</button>
-              <div>
-                <div class="mat-title">图书馆自习室开放时段</div>
-                <div class="mat-excerpt">周二、周四 14:00 后 A 区空位较多，考试周延长到 23:00，需要提前一天在系统里预约。</div>
-              </div>
-            </div>
-            <div class="mat-foot">
-              <span class="badge topic">其他</span>
-              <span class="badge kind">网页</span>
-              <span class="meta-dot"></span>
-              <span>上周</span>
-            </div>
-          </article>
-        </div>
-
-        <div class="row" style="justify-content:center;margin-top:14px">
+        <div class="row" style="justify-content:center;margin-top:14px" id="gridFoot" hidden>
           <button class="btn quiet sm" onclick="toast('加载更多（游标分页，每页 20 份）')">加载更多</button>
-          <span style="font-size:11.5px;color:var(--faint)">共 6 份 · 按更新时间倒序</span>
+          <span style="font-size:11.5px;color:var(--faint)" id="gridCount">共 0 份 · 按更新时间倒序</span>
         </div>
 
         <div class="selectbar" id="selectbar">
@@ -649,7 +553,6 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
                 <div class="eyebrow" style="margin-bottom:4px">Step 2 · 说任务，改条件</div>
                 <div class="row" style="gap:8px">
                   <h2 style="font-size:18px;font-weight:700;letter-spacing:-.015em">做个安排</h2>
-                  <span class="badge ok">对话 #A7F2</span>
                 </div>
               </div>
               <div class="row" style="gap:8px">
@@ -660,118 +563,22 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
               </div>
             </div>
             <div class="steps">
-              <div class="step done"><span class="n">✓</span>说任务</div><span class="step-sep"></span>
-              <div class="step done"><span class="n">✓</span>确认材料</div><span class="step-sep"></span>
-              <div class="step done"><span class="n">✓</span>生成</div><span class="step-sep"></span>
-              <div class="step now"><span class="n">4</span>改与存</div>
+              <div class="step now"><span class="n">1</span>说任务</div><span class="step-sep"></span>
+              <div class="step"><span class="n">2</span>确认材料</div><span class="step-sep"></span>
+              <div class="step"><span class="n">3</span>生成</div><span class="step-sep"></span>
+              <div class="step"><span class="n">4</span>改与存</div>
             </div>
           </div>
 
           <div class="thread" id="thread">
-
-            <div style="margin-top:4px">
-              <div class="role"><span class="ai">智</span>助手 · 复习安排 · 被拦下</div>
-              <div class="acard">
-                <h5>这次没有生成 <span class="badge warn">blocked</span></h5>
-                <div class="notice bad" style="margin-top:9px">
-                  <i>!</i>
-                  <div><b>SOURCE_INSUFFICIENT</b><br>你勾的两份材料只有链接和一句摘要，不能当依据。补一份带正文的，或把「仅跳转」那份换成课件。</div>
-                </div>
-                <div class="row" style="margin-top:10px">
-                  <button class="btn sm" onclick="openDrawer('new')">补一份材料</button>
-                  <button class="btn quiet sm" onclick="go('detail')">看是哪条没过</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="notice" style="background:var(--canvas-2);border-color:var(--line);color:var(--muted);font-size:12px">
-              <i>↻</i>
-              <div>上次用 <b>Kimi K2.6</b> 生成时 30 秒没返回，已自动退回 <b>DeepSeek Chat</b> 重试成功。材料和条件都还在，只是模型换了。</div>
-            </div>
-            <!-- 用户第一条 -->
-            <div class="msg-user">
-              <div class="q">周三晚上复习微积分，两小时，重点放在级数。</div>
-              <div class="conds"><span>120 分钟</span><span>周三 19:00 后</span><span>不带计算器</span></div>
-            </div>
-
-            <!-- 助手：检索候选 -->
-            <div>
-              <div class="role"><span class="ai">智</span>助手 · 检索材料</div>
-              <div class="acard">
-                <h5>从你的收藏里找到 4 份 <span class="badge ghost">仅本次使用</span></h5>
-                <div class="cand">
-                  <div class="switch on" onclick="toggleSwitch(this)"></div>
-                  <div>
-                    <div class="t">第十章 复习重点与题型分布</div>
-                    <div class="r">命中：<b>级数、判敛、题型</b> · 课件第 8–11 页</div>
-                  </div>
-                </div>
-                <div class="cand">
-                  <div class="switch on" onclick="toggleSwitch(this)"></div>
-                  <div>
-                    <div class="t">导师备注：错题集中在积分与级数</div>
-                    <div class="r">命中：<b>错题、练习、换元</b> · 手记</div>
-                  </div>
-                </div>
-                <div class="cand">
-                  <div class="switch on" onclick="toggleSwitch(this)"></div>
-                  <div>
-                    <div class="t">图书馆自习室开放时段</div>
-                    <div class="r">命中：<b>自习、预约</b> · 网页</div>
-                  </div>
-                </div>
-                <div class="cand off">
-                  <div class="switch" onclick="toggleSwitch(this)"></div>
-                  <div>
-                    <div class="t">期中范围说明与评分构成 <span class="badge warn" style="margin-left:4px">仅跳转</span></div>
-                    <div class="r">这份只有链接，不能作为依据，已自动排除。</div>
-                  </div>
-                </div>
-                <div class="row" style="margin-top:11px">
-                  <button class="btn primary sm" onclick="toast('已确认 3 份材料')">确认这 3 份</button>
-                  <button class="btn quiet sm">再找一些</button>
-                  <span style="font-size:11.5px;color:var(--faint)">未确认前不会生成</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 助手：结果摘要 -->
-            <div>
-              <div class="role"><span class="ai">智</span>助手 · 复习安排 · DeepSeek Chat</div>
-              <div class="acard">
-                <h5>两小时复习安排：级数优先，错题穿插 <span class="badge ok">已生成</span></h5>
-                <div style="font-size:12.5px;color:var(--muted);line-height:1.65">
-                  15:15 开始，先过判敛三法，再重做 7.3 / 8.1，最后 10 分钟自测。时间总长 60 分钟 ——
-                  你给的 120 分钟里我留了 60 分钟机动，可以随时说「排满 120 分钟」。
-                </div>
-                <div class="notice warn" style="margin-top:11px">
-                  <i>!</i><div>有两处器材数量来自上次记录（草稿纸 5 张），材料里没有写，已在右侧标出，可自行改。</div>
-                </div>
-                <div class="sugg">
-                  <button class="btn sm" onclick="toast('已按 60 分钟重排')">压缩到 60 分钟</button>
-                  <button class="btn sm" onclick="toast('已改到周六上午')">换到周六上午</button>
-                  <button class="btn sm" onclick="toast('已加上模拟题环节')">加 20 分钟模拟题</button>
-                </div>
-              </div>
-            </div>
-
-            <!-- 用户追问 -->
-            <div class="msg-user">
-              <div class="q">把级数放到最前面，另加 15 分钟只看错题。</div>
-              <div class="conds"><span>保留 3 份材料</span><span>条件已更新</span></div>
-            </div>
-
-            <div>
-              <div class="role"><span class="ai">智</span>助手 · 已重排</div>
-              <div class="acard">
-                <h5>已按新条件重排 <span class="badge ok">v2</span> <span class="badge ghost">旧版未保存</span></h5>
-                <div style="font-size:12.5px;color:var(--muted);line-height:1.65">
-                  级数移到 15:15–15:30，错题增加 15 分钟（7.3、8.1、8.4 三轮）。未保存的旧版不会覆盖「我的方案」里的记录。
-                </div>
-                <div class="row" style="margin-top:11px">
-                  <button class="btn primary sm" onclick="toast('已保存到我的方案')">保存为方案</button>
-                  <button class="btn quiet sm" onclick="go('detail')">看出处</button>
-                </div>
+            <div class="empty" id="threadEmpty" style="display:grid;margin:auto">
+              <div class="empty-ic">说</div>
+              <b>说一句要安排什么</b>
+              <p>比如「这周三晚上复习两小时，重点放在最难的那一章」。我会先在你收藏的材料里找依据，确认后才生成。</p>
+              <div class="row" style="justify-content:center;flex-wrap:wrap">
+                <button class="btn sm" onclick="fillComposer('这周三晚上复习两小时，重点放在最难的那一章')">复习备考</button>
+                <button class="btn sm" onclick="fillComposer('周六下午去市里，来回怎么安排最省时间')">出门办事</button>
+                <button class="btn sm" onclick="fillComposer('下周办一场 40 人的活动，怎么排流程')">办个小活动</button>
               </div>
             </div>
           </div>
@@ -795,74 +602,16 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
               <div class="seg" id="modelSeg">
                 <button class="on">DeepSeek Chat</button><button>Kimi K2.6</button><button>Kimi K3</button><button onclick="toast('对比模式：同时跑 2–4 个模型，右栏分列')">对比</button>
               </div>
-              <span class="badge ok">succeeded</span>
-            </div>
-            <div class="row" style="gap:8px;font-size:11.5px;color:var(--faint)">
-              <span class="mono">gen_9c31</span><span class="meta-dot"></span>
-              <span>3 份材料</span><span class="meta-dot"></span><span>20:14 生成</span>
             </div>
           </div>
 
-          <div class="result-body">
-            <div class="gen-title">两小时复习安排：级数优先，错题穿插</div>
-            <div class="tl">15:15 → 16:15</div>
-
-            <div>
-              <div class="item">
-                <div class="idx">01</div>
-                <div>
-                  <div class="h">判敛三法过一遍 <span class="mins">15 min</span><span class="must">必保留</span></div>
-                  <div class="d">比较 / 比值 / 积分判别各配一道例题，重点看「极限 &lt; 1」那一步的条件。</div>
-                  <div style="margin-top:6px"><span class="cite-link" onclick="go('detail')">出处 · 课件 第 8 页</span></div>
-                </div>
-              </div>
-              <div class="item">
-                <div class="idx">02</div>
-                <div>
-                  <div class="h">重做 7.3 与 8.1 错题 <span class="mins">20 min</span></div>
-                  <div class="d">先遮住答案重算，再对照原解法；两次错同一处就记到错题本第 3 条。</div>
-                  <div style="margin-top:6px"><span class="cite-link" onclick="go('detail')">出处 · 导师备注</span></div>
-                </div>
-              </div>
-              <div class="item">
-                <div class="idx">03</div>
-                <div>
-                  <div class="h">换元后回代专项 <span class="mins">15 min</span></div>
-                  <div class="d">上次 6 道错题都死在回代，练 4 道换元积分，每道写完整代换链。</div>
-                  <div style="margin-top:6px"><span class="cite-link" onclick="go('detail')">出处 · 课件 第 9–10 页</span></div>
-                </div>
-              </div>
-              <div class="item">
-                <div class="idx">04</div>
-                <div>
-                  <div class="h">5 道选择题自测 <span class="mins">10 min</span><span class="must">必保留</span></div>
-                  <div class="d">限时完成，错题立刻回看第 01 步的判断条件。</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="notice warn">
-              <i>!</i>
-              <div><b>2 处需要你确认</b><br>· 草稿纸 5 张：来自上次记录，材料里没有<br>· 自习室：材料提到需提前一天预约，未写具体房间</div>
-            </div>
-
-            <div>
-              <div class="sec-note" style="font-size:11px;color:var(--faint);margin-bottom:7px">八项复核</div>
-              <div class="checks">
-                <span class="ck pass">结构</span><span class="ck pass">引用闸门</span><span class="ck warn">数字白名单</span>
-                <span class="ck pass">时长合计</span><span class="ck pass">保留项覆盖</span><span class="ck pass">材料派生</span>
-                <span class="ck pass">预算</span><span class="ck warn">时间轴</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="result-foot">
-            <div class="row" style="gap:8px">
-              <button class="btn primary" style="flex:1" onclick="toast('已保存到我的方案')">保存为方案</button>
-              <button class="btn" onclick="toast('已复制公开版正文')">复制正文</button>
-            </div>
-            <div style="font-size:11px;color:var(--faint);display:flex;justify-content:space-between">
-              <span>复制不含私人备注与选择理由</span><span>3 条出处</span>
+          <div class="result-body" style="display:grid;place-items:center;text-align:center">
+            <div style="padding:0 22px">
+              <div style="font-size:24px;color:var(--faint);margin-bottom:10px">排</div>
+              <b style="font-size:13.5px">生成结果会出现在这里</b>
+              <p style="font-size:12px;color:var(--muted);line-height:1.75;max-width:30ch;margin:9px auto 0">
+                左边说清任务、确认材料后开始生成。右栏会显示分段时间表、八项复核和每条的出处。
+              </p>
             </div>
           </div>
         </aside>
@@ -886,156 +635,50 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
 
         <div class="toolbar">
           <div class="chips">
-            <button class="chip on">全部<span class="n">3</span></button>
-            <button class="chip">复习<span class="n">1</span></button>
-            <button class="chip">出行<span class="n">1</span></button>
-            <button class="chip">活动<span class="n">1</span></button>
+            <button class="chip on">全部<span class="n">0</span></button>
+            <button class="chip">复习<span class="n">0</span></button>
+            <button class="chip">出行<span class="n">0</span></button>
+            <button class="chip">活动<span class="n">0</span></button>
           </div>
           <div class="spacer"></div>
-          <span style="font-size:11.5px;color:var(--faint)">按更新时间排序 · 共 3 份</span>
+          <span style="font-size:11.5px;color:var(--faint)">按更新时间排序 · 共 0 份</span>
         </div>
 
-        <div class="grid-plans">
-          <article class="plan" onclick="go('detail')">
-            <div class="plan-top"><span class="badge topic">复习</span><span class="mono" style="color:var(--faint)">今天 20:14</span></div>
-            <h4>两小时复习安排：级数优先，错题穿插</h4>
-            <p>15:15 判敛三法 → 重做 7.3 / 8.1 → 换元回代专项 → 5 道选择自测。草稿纸 5 张需确认。</p>
-            <div class="plan-foot">
-              <span>3 条出处</span><span class="meta-dot"></span><span>v2</span>
-              <div class="plan-actions">
-                <button class="btn quiet sm" onclick="event.stopPropagation();toast('已复制公开版正文')">复制</button>
-                <button class="btn quiet sm" onclick="event.stopPropagation();openPlanMenu(this)">···</button>
-              </div>
-            </div>
-          </article>
+        <div class="grid-plans" id="planGrid"></div>
 
-          <article class="plan" onclick="go('detail')">
-            <div class="plan-top"><span class="badge topic" style="background:var(--amber-soft);color:var(--amber)">出行</span><span class="mono" style="color:var(--faint)">昨天 18:02</span></div>
-            <h4>周六返校：南站换乘 47 分钟</h4>
-            <p>16:15 高铁 → 2 号线转 1 号线 35 分钟 → 18:00 前到宿舍，留 10 分钟步行。打车备选 22 分钟。</p>
-            <div class="plan-foot">
-              <span>2 条出处</span><span class="meta-dot"></span><span>v1</span>
-              <div class="plan-actions">
-                <button class="btn quiet sm" onclick="event.stopPropagation();toast('已复制公开版正文')">复制</button>
-                <button class="btn quiet sm" onclick="event.stopPropagation();openPlanMenu(this)">···</button>
-              </div>
-            </div>
-          </article>
-
-          <article class="plan" onclick="go('detail')">
-            <div class="plan-top"><span class="badge topic" style="background:#EDE8F6;color:#59479B">活动</span><span class="mono" style="color:var(--faint)">11-15 14:30</span></div>
-            <h4>招新当天流程（40 人，3 个摊位）</h4>
-            <p>签到 → 开场 5 分钟 → 三摊轮转各 12 分钟 → 答疑 → 合影。物料：签到表、贴纸 200 张、桌牌 6 个。</p>
-            <div class="plan-foot">
-              <span>2 条出处</span><span class="meta-dot"></span><span>v1</span>
-              <div class="plan-actions">
-                <button class="btn quiet sm" onclick="event.stopPropagation();toast('已复制公开版正文')">复制</button>
-                <button class="btn quiet sm" onclick="event.stopPropagation();openPlanMenu(this)">···</button>
-              </div>
-            </div>
-          </article>
+        <div class="empty" id="planEmpty" style="display:grid">
+          <div class="empty-ic">案</div>
+          <b>还没有方案</b>
+          <p>在「做个安排」里生成一份，点「保存为方案」就会出现在这里。重复保存同一份会更新原记录。</p>
+          <div class="row" style="justify-content:center">
+            <button class="btn primary" onclick="go('arrange')">＋ 去做第一个安排</button>
+          </div>
         </div>
 
         <div class="blk" style="margin-top:18px;display:flex;gap:10px;align-items:center">
           <span style="font-size:16px">ⓘ</span>
-          <div>重复保存同一份方案会更新原记录。生成中的方案也能再改条件，以最后一次输入为准。
-            <a href="#" onclick="go('auth');return false">了解试用期规则</a></div>
+          <div>重复保存同一份方案会更新原记录。生成中的方案也能再改条件，以最后一次输入为准。</div>
         </div>
       </div>
     </section>
 
     <!-- ================= 屏幕 4：方案详情 + 出处 ================= -->
     <section class="screen" id="screen-detail">
-      <div class="detail">
-        <div class="detail-main">
-          <button class="btn quiet sm" onclick="go('plans')">← 返回我的方案</button>
-          <div class="doc" style="margin-top:14px">
-            <div class="row" style="gap:8px;margin-bottom:10px">
-              <span class="badge topic">复习</span>
-              <span class="badge ghost">保存于 20:14</span>
-              <span class="badge ghost">v2</span>
-            </div>
-            <h2>两小时复习安排：级数优先，错题穿插</h2>
-            <div class="row" style="gap:6px;margin:12px 0 18px">
-              <span class="badge kind">120 分钟</span>
-              <span class="badge kind">周三 19:00 后</span>
-              <span class="badge kind">不带计算器</span>
-              <span class="badge kind">3 份材料</span>
-              <span class="badge kind">DeepSeek Chat</span>
-            </div>
-
-            <div class="block">15:15–15:30　判敛三法过一遍（必保留）
-比较 / 比值 / 积分判别各配一道例题，重点看「极限 &lt; 1」那一步的条件。
-
-15:30–15:50　重做 7.3 与 8.1 错题
-先遮住答案重算，再对照原解法；两次错同一处就记到错题本第 3 条。
-
-15:50–16:05　换元后回代专项
-上次 6 道错题都死在回代，练 4 道换元积分，每道写完整代换链。
-
-16:05–16:15　5 道选择题自测（必保留）
-限时完成，错题立刻回看第一步的判断条件。</div>
-
-            <div class="private">
-              <div class="lbl">私人备注 · 不会出现在复制版里</div>
-              <div class="txt">草稿纸 5 张是上次自己记的，别当成老师要求；自习室要提前一天在系统里约，明天记得约。</div>
-            </div>
-
-            <div style="margin-top:16px">
-              <div class="sec-note">选择理由 · 也不会复制</div>
-              <div style="font-size:12.5px;color:var(--muted);line-height:1.72">
-                优先放级数因为课件第 8 页标了「本次大题重点」；错题部分只用导师备注里的 7.3、8.1、8.4 三道，
-                没有编造题目编号。60 分钟机动留白是因为你不确定当天几点下晚课。
-              </div>
-            </div>
-
-            <div class="hairline"></div>
-            <div class="row">
-              <button class="btn primary" onclick="toast('已复制公开版正文（不含私人备注）')">复制公开版正文</button>
-              <button class="btn" onclick="go('arrange')">继续改这份</button>
-              <button class="btn quiet" onclick="toast('已导出 Markdown')">导出 .md</button>
-              <div class="spacer"></div>
-              <button class="btn quiet sm" style="color:var(--danger)" onclick="toast('已移到回收站')">删除</button>
-            </div>
+      <div class="pad">
+        <button class="btn quiet sm" onclick="go('plans')">← 返回我的方案</button>
+        <div class="empty" style="display:grid;margin-top:44px">
+          <div class="empty-ic">↗</div>
+          <b>还没有选中的方案</b>
+          <p>从「我的方案」里点开一份，就能看到完整正文、私人备注，以及每条安排保存下来的出处快照。</p>
+          <div class="row" style="justify-content:center">
+            <button class="btn primary" onclick="go('plans')">去我的方案</button>
           </div>
         </div>
-
-        <aside class="detail-aside">
-          <div class="row" style="justify-content:space-between;margin-bottom:10px">
-            <div style="font-size:12px;font-weight:700;letter-spacing:.04em">出处 · 3 条</div>
-            <span class="mono" style="font-size:11px;color:var(--faint)">生成时快照</span>
-          </div>
-          <div class="cite">
-            <div class="q">「级数收敛判别与积分换序是本次大题重点，选择填空覆盖判敛、求和、应用三型。」</div>
-            <div class="src"><b>第十章 复习重点与题型分布</b><span>·</span><span>课件 第 8 页</span></div>
-            <div class="src" style="cursor:pointer;color:var(--accent)">↗ 打开原文件</div>
-          </div>
-          <div class="cite">
-            <div class="q">「第 7、8 章错了 6 道，都是换元后忘记回代。建议先重做课后 7.3、8.1。」</div>
-            <div class="src"><b>导师备注：错题集中在积分与级数</b><span>·</span><span>手记</span></div>
-          </div>
-          <div class="cite">
-            <div class="q">「周二、周四 14:00 后 A 区空位较多，考试周延长到 23:00，需提前一天预约。」</div>
-            <div class="src"><b>图书馆自习室开放时段</b><span>·</span><span>网页 第 1 页</span></div>
-            <div class="src" style="cursor:pointer;color:var(--accent)">↗ 跳到原网页</div>
-          </div>
-
-          <div class="blk" style="margin-top:14px;font-size:11.5px">
-            出处保存的是生成当时的摘录快照，之后改材料也不影响这份方案。
-          </div>
-
-          <div class="hairline"></div>
-          <div style="font-size:11.5px;color:var(--faint);line-height:1.7">
-            生成模型 DeepSeek Chat · 未联网<br>
-            复核：8 项通过 6 项 · 2 项提示<br>
-            生成耗时 6.4 秒
-          </div>
-        </aside>
       </div>
     </section>
 
     <!-- ================= 屏幕 5：登录 / 注册 ================= -->
-    <section class="screen" id="screen-auth" style="height:100vh">
+    <section class="screen active" id="screen-auth" style="height:100vh">
       <div class="auth">
         <div class="auth-left">
           <div class="brand">
@@ -1044,7 +687,7 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
           </div>
           <div class="auth-quote">先<em>记住</em>，<br>再<em>安排</em>。</div>
           <p style="color:var(--muted);font-size:13.5px;max-width:34ch;line-height:1.7">
-            把课件、通知和手记放进自己的知识库，说一句「周三复习微积分」，就能得到一份每句都有出处的安排。
+            把课件、通知和手记放进自己的知识库，说一句「这周三晚上复习两小时」，就能得到一份每句都有出处的安排。
           </p>
           <div class="auth-points">
             <div class="auth-point"><i>1</i><div><b>资料能用进方案</b> · 只检索你自己收的材料，不联网猜</div></div>
@@ -1052,7 +695,7 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
             <div class="auth-point"><i>3</i><div><b>有据可查</b> · 每条安排都能点回课件页码或原网页</div></div>
           </div>
           <div style="margin-top:auto;font-size:11.5px;color:var(--faint);display:flex;gap:14px;flex-wrap:wrap">
-            <span>试用 30 天 · 到期转只读</span><span>·</span><span>数据只在你账号内</span><span>·</span><span>v0.2.4</span>
+            <span>注册后使用</span><span>·</span><span>数据只在你账号内</span><span>·</span><span>v0.2.4</span>
           </div>
         </div>
 
@@ -1064,20 +707,19 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
             </div>
             <div class="field">
               <label>用户名 <span class="hint">3–32 位，字母数字下划线</span></label>
-              <input class="input" placeholder="lin_xiaoming" value="lin_xiaoming" />
+              <input class="input" id="authUser" placeholder="起一个用户名" autocomplete="username" />
             </div>
             <div class="field">
               <label>密码 <span class="hint">至少 8 位</span></label>
-              <input class="input" type="password" placeholder="••••••••" value="········" />
+              <input class="input" id="authPass" type="password" placeholder="至少 8 位" autocomplete="current-password" />
             </div>
-            <button class="btn primary" style="width:100%;height:42px" onclick="toast('已登录，进入我的收藏');go('collect')">
+            <button class="btn primary" style="width:100%;height:42px" onclick="submitAuth()">
               登录并继续
             </button>
             <div class="trial-note">
               <span>ⓘ</span>
-              <div>不注册也能用：匿名试用 <b>30 天</b>，到期转只读，再过 7 天清理。注册或登录后材料跟账号走，<b>不再计时</b>。</div>
+              <div>必须注册或登录才能使用。账号内的材料与方案只有你自己能看，模型密钥只存在服务端。</div>
             </div>
-            <button class="btn" style="width:100%" onclick="go('collect')">先不登录，用试用身份看看</button>
             <div style="font-size:11.5px;color:var(--faint);text-align:center;line-height:1.7">
               继续即表示同意「数据只用于生成你的方案」<br>模型密钥只存在服务端
             </div>
@@ -1099,13 +741,12 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
         </div>
 
         <div class="phones">
-          <!-- 手机 1：收藏 -->
           <div class="phone">
             <div class="phone-in">
               <div class="phone-status"><span>20:14</span><span>5G ▮▮▮</span></div>
               <div class="phone-head">
                 <div><div style="font-size:11px;color:var(--faint);letter-spacing:.1em">STEP 1</div><b style="font-size:15px">我的收藏</b></div>
-                <span class="badge ok" style="font-size:10px">6 份</span>
+                <span class="badge ghost" style="font-size:10px">0 份</span>
               </div>
               <div class="phone-body">
                 <div style="display:flex;gap:5px;overflow:hidden">
@@ -1113,49 +754,29 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
                   <span class="chip" style="font-size:10.5px;padding:4px 9px">复习</span>
                   <span class="chip" style="font-size:10.5px;padding:4px 9px">出行</span>
                 </div>
-                <div class="mini-mat" style="border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)">
-                  <div class="row" style="gap:6px"><span class="badge topic" style="font-size:9.5px">复习</span><span style="font-size:9.5px;color:var(--faint)">课件 8 页</span></div>
-                  <div class="t">第十章 复习重点与题型分布</div>
-                  <div class="x">级数收敛判别与积分换序是本次大题重点…</div>
-                </div>
-                <div class="mini-mat">
-                  <div class="row" style="gap:6px"><span class="badge topic" style="font-size:9.5px">复习</span><span style="font-size:9.5px;color:var(--faint)">手记</span></div>
-                  <div class="t">导师备注：错题集中在积分与级数</div>
-                  <div class="x">上次答疑说到第 7、8 章错了 6 道…</div>
-                </div>
-                <div class="mini-mat">
-                  <div class="row" style="gap:6px"><span class="badge topic" style="font-size:9.5px">出行</span><span style="font-size:9.5px;color:var(--faint)">手记</span></div>
-                  <div class="t">周末返校：高铁 + 地铁换乘记录</div>
-                  <div class="x">16:15 那班 47 分钟到南站…</div>
+                <div style="border:1px dashed var(--line);border-radius:12px;padding:22px 14px;text-align:center;color:var(--muted)">
+                  <div style="font-size:20px;color:var(--faint);margin-bottom:6px">收</div>
+                  <b style="font-size:12px;color:var(--ink)">还没有材料</b>
+                  <div style="font-size:11px;line-height:1.6;margin-top:5px">先把课件或手记收进来</div>
                 </div>
               </div>
-              <div style="padding:8px 12px 4px"><div class="btn primary" style="width:100%;height:34px;font-size:12px">送入对话 · 2 份</div></div>
+              <div style="padding:8px 12px 4px"><div class="btn primary" style="width:100%;height:34px;font-size:12px">＋ 新增材料</div></div>
               <div class="phone-tabs"><div class="on">收藏</div><div>安排</div><div>方案</div></div>
             </div>
           </div>
 
-          <!-- 手机 2：对话 -->
           <div class="phone">
             <div class="phone-in">
               <div class="phone-status"><span>20:15</span><span>5G ▮▮▮</span></div>
               <div class="phone-head">
                 <div><div style="font-size:11px;color:var(--faint);letter-spacing:.1em">STEP 2</div><b style="font-size:15px">做个安排</b></div>
-                <span class="badge ghost" style="font-size:10px">复习</span>
+                <span class="badge ghost" style="font-size:10px">新任务</span>
               </div>
               <div class="phone-body">
-                <div class="phone-bubble">周三晚上复习微积分，两小时，重点级数。</div>
-                <div class="phone-ai">
-                  <b style="font-size:11px">找到 3 份可用材料</b><br>
-                  · 第十章 复习重点（课件 8–11 页）<br>
-                  · 导师备注：错题集中<br>
-                  <span style="color:var(--accent)">确认后开始生成 →</span>
-                </div>
-                <div class="phone-ai" style="border-color:#CFE0D5">
-                  <b style="font-size:11px">两小时复习安排</b><br>
-                  15:15 判敛三法 · 15 min<br>
-                  15:30 重做 7.3 / 8.1 · 20 min<br>
-                  15:50 换元回代 · 15 min<br>
-                  <span style="color:var(--accent)">保存为方案</span>
+                <div style="border:1px dashed var(--line);border-radius:12px;padding:22px 14px;text-align:center;color:var(--muted);margin:auto 0">
+                  <div style="font-size:20px;color:var(--faint);margin-bottom:6px">说</div>
+                  <b style="font-size:12px;color:var(--ink)">说一句要安排什么</b>
+                  <div style="font-size:11px;line-height:1.6;margin-top:5px">比如「这周三晚上复习两小时」</div>
                 </div>
               </div>
               <div style="padding:8px 12px 6px;display:flex;gap:6px">
@@ -1166,30 +787,19 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
             </div>
           </div>
 
-          <!-- 手机 3：方案 + 出处 -->
           <div class="phone">
             <div class="phone-in">
               <div class="phone-status"><span>20:16</span><span>5G ▮▮▮</span></div>
               <div class="phone-head">
-                <div><div style="font-size:11px;color:var(--faint);letter-spacing:.1em">STEP 3</div><b style="font-size:15px">两小时复习安排</b></div>
-                <span class="badge ok" style="font-size:10px">v2</span>
+                <div><div style="font-size:11px;color:var(--faint);letter-spacing:.1em">STEP 3</div><b style="font-size:15px">我的方案</b></div>
+                <span class="badge ghost" style="font-size:10px">0 份</span>
               </div>
               <div class="phone-body">
-                <div class="phone-ai" style="line-height:1.7">
-                  15:15–15:30　判敛三法（必保留）<br>
-                  15:30–15:50　重做错题<br>
-                  15:50–16:05　换元回代<br>
-                  16:05–16:15　自测 5 题
+                <div style="border:1px dashed var(--line);border-radius:12px;padding:22px 14px;text-align:center;color:var(--muted);margin:auto 0">
+                  <div style="font-size:20px;color:var(--faint);margin-bottom:6px">案</div>
+                  <b style="font-size:12px;color:var(--ink)">还没有方案</b>
+                  <div style="font-size:11px;line-height:1.6;margin-top:5px">生成后点「保存为方案」就在这里</div>
                 </div>
-                <div class="mini-mat" style="background:var(--amber-soft);border-color:#E4CEA4">
-                  <div class="t" style="font-size:11px;color:#7A5512">私人备注 · 不复制</div>
-                  <div class="x" style="color:#5F4413">草稿纸数量是上次自己记的，别当老师要求。</div>
-                </div>
-                <div class="mini-mat">
-                  <div class="t" style="font-size:11px">出处 · 3 条</div>
-                  <div class="x">「级数收敛判别与积分换序是本次大题重点」<br><span style="color:var(--accent)">课件 第 8 页 ↗</span></div>
-                </div>
-                <div class="btn primary" style="height:34px;font-size:12px">复制公开版正文</div>
               </div>
               <div class="phone-tabs"><div>收藏</div><div>安排</div><div class="on">方案</div></div>
             </div>
@@ -1222,7 +832,7 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
 
     <div class="field">
       <label>标题 <span class="hint">1–120 字</span></label>
-      <input class="input" value="第十章 复习重点与题型分布" />
+      <input class="input" placeholder="比如：第十章 复习重点" />
     </div>
     <div class="two">
       <div class="field">
@@ -1237,33 +847,28 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
 
     <div class="field" id="fieldWeb">
       <label>原文链接 <span class="hint">有链接才能跳到原网页</span></label>
-      <input class="input" placeholder="https://…" value="https://jw.example.edu.cn/notice/20261105" />
+      <input class="input" placeholder="https://…" />
     </div>
 
     <div class="field" id="fieldFile" style="display:none">
       <label>上传 PDF / 文档 <span class="hint">先转 Markdown，不做版式还原</span></label>
-      <div class="dropzone" onclick="toast('已读取 12 页，转成 Markdown')">
+      <div class="dropzone" onclick="toast('已读取，转成 Markdown')">
         <b>拖入文件，或点击选择</b>
         <div style="font-size:11.5px;color:var(--muted);margin-top:4px">支持 .pdf .docx .pptx .md .txt · 单份 ≤ 20MB</div>
       </div>
       <div class="md" style="margin-top:10px">
-        <h4>第十章 复习重点与题型分布</h4>
-        <div>## 8 页 · 判敛三法</div>
-        <div>1. 比较判别：找同阶 p 级数<br>2. 比值判别：极限 &lt; 1 收敛<br>3. 积分判别：单调递减非负</div>
-        <div style="color:var(--faint);margin-top:6px">已截取前 20000 字符，其余未收录。</div>
+        <div style="color:var(--faint)">选了文件后，这里预览转出来的 Markdown。</div>
       </div>
     </div>
 
     <div class="two">
-      <div class="field"><label>起始页</label><input class="input mono" value="8" /></div>
-      <div class="field"><label>结束页</label><input class="input mono" value="11" /></div>
+      <div class="field"><label>起始页</label><input class="input mono" placeholder="8" /></div>
+      <div class="field"><label>结束页</label><input class="input mono" placeholder="11" /></div>
     </div>
 
     <div class="field">
       <label>摘录正文 <span class="hint">做方案时模型只会看到这段</span></label>
-      <textarea class="textarea">级数收敛判别与积分换序是本次大题重点。
-常考三型：判敛、求和、应用。
-练习建议：课后 7.3、8.1、8.4。</textarea>
+      <textarea class="textarea" placeholder="把这份材料里真正要用的那几句摘下来…"></textarea>
     </div>
     <div class="field">
       <label>私人备注 <span class="hint">只给你看，不进公开版</span></label>
@@ -1286,7 +891,35 @@ body{background-color:var(--canvas) !important;color:var(--ink) !important}
 
 <script>
 var SCREENS = ['collect','arrange','plans','detail','auth','mobile'];
+var loggedIn = false;
+var authMode = 'login';
+
+function signIn(name){
+  loggedIn = true;
+  document.getElementById('accountName').textContent = name;
+  document.getElementById('accountSub').textContent = '已登录 · 本机账号';
+  document.getElementById('accountAvatar').textContent = name.slice(0, 1).toUpperCase();
+  updateAccount();
+  toast(authMode === 'register' ? '注册成功，开始收集材料' : '已登录');
+  go('collect');
+}
+
+function updateAccount(){
+  var btn = document.getElementById('logoutBtn');
+  if (btn) btn.hidden = !loggedIn;
+  var sub = document.getElementById('accountSub');
+  if (sub && !loggedIn) sub.textContent = '注册后开始使用';
+  var av = document.getElementById('accountAvatar');
+  if (av && !loggedIn) av.textContent = '未';
+  var nm = document.getElementById('accountName');
+  if (nm && !loggedIn) nm.textContent = '未登录';
+}
+
 function go(id){
+  if (!loggedIn && id !== 'auth'){
+    toast('请先注册或登录');
+    id = 'auth';
+  }
   SCREENS.forEach(function(s){
     var el = document.getElementById('screen-' + s);
     if (el) el.classList.toggle('active', s === id);
@@ -1359,17 +992,31 @@ function sendToChat(){
 var curTopic = '全部';
 function filterMats(q){
   q = (q || '').trim().toLowerCase();
+  var cards = document.querySelectorAll('#matGrid .mat');
   var shown = 0;
-  document.querySelectorAll('#matGrid .mat').forEach(function(card){
+  cards.forEach(function(card){
     var topicOk = curTopic === '全部' || card.getAttribute('data-topic') === curTopic;
+    var title = card.querySelector('.mat-title');
     var textOk = !q || card.getAttribute('data-text').toLowerCase().indexOf(q) >= 0
-      || card.querySelector('.mat-title').textContent.toLowerCase().indexOf(q) >= 0;
+      || (title && title.textContent.toLowerCase().indexOf(q) >= 0);
     var show = topicOk && textOk;
     card.style.display = show ? '' : 'none';
     if (show) shown++;
   });
-  var es = document.getElementById('emptyState');
-  if (es) es.style.display = shown ? 'none' : 'grid';
+  var first = document.getElementById('emptyFirst');
+  var none = document.getElementById('emptyState');
+  var foot = document.getElementById('gridFoot');
+  if (!cards.length){
+    if (first) first.style.display = 'grid';
+    if (none) none.style.display = 'none';
+    if (foot) foot.hidden = true;
+  } else {
+    if (first) first.style.display = 'none';
+    if (none) none.style.display = shown ? 'none' : 'grid';
+    if (foot) foot.hidden = !shown;
+  }
+  var gc = document.getElementById('gridCount');
+  if (gc) gc.textContent = '共 ' + cards.length + ' 份 · 按更新时间倒序';
 }
 document.querySelectorAll('#topicChips .chip[data-topic]').forEach(function(chip){
   chip.addEventListener('click', function(){
@@ -1396,8 +1043,24 @@ function bindSeg(id){
 function authTab(btn, mode){
   btn.parentNode.querySelectorAll('button').forEach(function(b){ b.classList.remove('on'); });
   btn.classList.add('on');
+  authMode = mode;
   var submit = document.querySelector('#screen-auth .btn.primary');
-  if (submit) submit.textContent = mode === 'register' ? '注册并开始试用' : '登录并继续';
+  if (submit) submit.textContent = mode === 'register' ? '注册并开始使用' : '登录并继续';
+}
+
+function submitAuth(){
+  var u = (document.getElementById('authUser').value || '').trim();
+  var pw = document.getElementById('authPass').value || '';
+  if (u.length < 3) { toast('请先填用户名（3–32 位）'); return; }
+  if (pw.length < 8) { toast('密码至少 8 位'); return; }
+  signIn(u);
+}
+
+function fillComposer(txt){
+  var box = document.getElementById('composer');
+  if (!box) return;
+  box.value = txt;
+  box.focus();
 }
 
 /* 发送追问 */
@@ -1406,6 +1069,8 @@ function sendMsg(){
   var text = (box.value || '').trim();
   if (!text) { toast('先写一句要改什么'); return; }
   var thread = document.getElementById('thread');
+  var te = document.getElementById('threadEmpty');
+  if (te) te.style.display = 'none';
   var wrap = document.createElement('div');
   wrap.className = 'msg-user';
   wrap.innerHTML = '<div class="q"></div><div class="conds"><span>条件已更新</span></div>';
@@ -1520,7 +1185,9 @@ function batchDelete(){
 }
 
 function logout(){
-  toast('已退出登录 · 本地不再保留密钥');
+  loggedIn = false;
+  updateAccount();
+  toast('已退出登录');
   go('auth');
 }
 
@@ -1533,8 +1200,8 @@ document.addEventListener('keydown', function(e){
   if (e.key === 'Escape') closeDrawer();
 });
 refreshSel();
-var hash = (location.hash || '').replace('#', '');
-if (SCREENS.indexOf(hash) >= 0) go(hash);
+filterMats('');
+go(loggedIn ? 'collect' : 'auth');
 </script>
 </body>
 </html>

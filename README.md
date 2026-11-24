@@ -1,3 +1,13 @@
+---
+title: 去做
+emoji: 🗂️
+colorFrom: indigo
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # 去做 · 把材料变成能执行的安排
 
 一个帮学生把「收藏的资料」变成「可执行的安排」的产品。选定材料 → 和它对话 → 生成带出处的方案 → 存成自己的方案。

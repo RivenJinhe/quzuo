@@ -1,0 +1,36 @@
+# 去做 · 单机部署（阿里云轻量应用服务器 / ECS / 任意 VPS）
+# 用法：cp .env.prod.example .env.prod 填好值后，docker compose up -d --build
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: qu
+      # 一定要改成强密码，再同步改下面 app 的 QU_DATABASE_URL
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-change-me-now}
+      POSTGRES_DB: qu_dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qu -d qu_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # 不对外暴露 5432，只有 compose 内部网络能访问
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env.prod
+    environment:
+      # 这一行覆盖 .env.prod 里的库地址，指向 compose 内的 db 容器
+      QU_DATABASE_URL: postgresql+psycopg://qu:${PG_PASSWORD:-change-me-now}@db:5432/qu_dev
+    ports:
+      # 左边是公网端口（安全组/防火墙放行它），右边是容器内端口
+      - "8010:7860"
+
+volumes:
+  pgdata:
