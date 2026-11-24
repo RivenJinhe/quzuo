@@ -12,9 +12,9 @@ pinned: false
 
 一个帮学生把「收藏的资料」变成「可执行的安排」的产品。选定材料 → 和它对话 → 生成带出处的方案 → 存成自己的方案。
 
-首版按 [PRD v0.2.5](交付物/PRD_v0.2.5.md) 开发。注册或登录后，从默认入口 [`/app/`](后端/web/index.html) 进入“我的收藏”“做个安排”和“我的方案”。这三个页面已接入材料、对话和方案接口。
+首版按 [PRD v0.2.5](交付物/PRD_v0.2.5.md) 开发。注册或登录后，从产品入口 `/app/` 进入“我的收藏”“做个安排”和“我的方案”。三个页面由 [React 应用](前端/src/App.tsx) 组织。
 
-`/` 和旧链接 `/app/design.html` 都指向同一产品入口。开发联调用的[接口测试台](后端/web/testbench.html) 位于 `/app/testbench.html`。
+`/` 和旧链接 `/app/design.html` 都指向同一产品入口。开发联调用的[接口测试台](前端/src/testbench/main.tsx) 位于 `/app/testbench.html`。
 
 ## 首版试用范围
 
@@ -40,6 +40,7 @@ pinned: false
 
 ```
 去做/
+├── 前端/                  pnpm + React + TypeScript，Vite 构建产品页与接口测试台
 ├── 后端/                  Python + FastAPI + PostgreSQL
 │   ├── app/               应用源码
 │   │   ├── routers/       路由：auth / materials / conversations / plans / models / citations
@@ -49,7 +50,7 @@ pinned: false
 │   │   └── main.py        入口（含 /app 静态前端挂载）
 │   ├── tests/             自动化测试
 │   ├── scripts/           辅助脚本
-│   ├── web/               前端（纯静态、无构建，由后端 /app 挂载）
+│   ├── web/dist/          前端生产构建产物，由 FastAPI 挂载到 /app
 │   ├── requirements.txt
 │   └── .env.example       环境变量模板（真实 .env 不入库）
 ├── 交付物/                 设计稿、PRD、验收报告
@@ -58,6 +59,21 @@ pinned: false
 ```
 
 ---
+
+## 前端开发与构建
+
+使用 Node.js 24 和项目 [package.json](前端/package.json) 指定的 pnpm 版本。在仓库根目录执行：
+
+```bash
+pnpm --dir 前端 install --frozen-lockfile
+pnpm --dir 前端 dev
+```
+
+启动下方的 FastAPI 服务后，打开 `http://localhost:5173/app/` 开发产品页，或打开 `http://localhost:5173/app/testbench.html` 调试接口。Vite 将 API 请求代理到 `127.0.0.1:8010`，两个页面共用登录会话。
+
+从 [React 入口](前端/src/main.tsx) 进入[收藏](前端/src/materials/)、[安排](前端/src/arrange/)和[方案](前端/src/plans/)组件。产品页与[测试台](前端/src/testbench/)共用[接口类型](前端/src/types.ts)、[请求和生成轮询](前端/src/api.ts)。
+
+生产构建运行 `pnpm --dir 前端 build`。通过 TypeScript 检查后，Vite 将两个 HTML 入口和静态资源写入 `后端/web/dist/`。先完成构建再启动 FastAPI，即可从后端端口访问页面。仓库 Dockerfile 会在镜像构建时执行这一步。
 
 ## 快速开始（后端）
 

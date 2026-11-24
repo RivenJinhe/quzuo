@@ -164,7 +164,7 @@ from pathlib import Path as _Path
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
-WEB_DIR = _Path(__file__).resolve().parent.parent / "web"
+WEB_DIR = _Path(__file__).resolve().parent.parent / "web" / "dist"
 
 @app.get("/app/design.html", include_in_schema=False)
 def _design_redirect():

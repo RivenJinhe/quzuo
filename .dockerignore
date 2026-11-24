@@ -6,6 +6,10 @@
 后端/tests
 后端/.pytest_cache
 后端/web_原测试台_20261122
+**/node_modules
+**/dist
+.git
+.env.prod
 
 **/__pycache__
 **/*.pyc

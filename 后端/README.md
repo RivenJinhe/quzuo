@@ -23,12 +23,14 @@ app/
     turns.py             自然语言追问解析（一句话 → 条件增量）
     validation.py        检查引用、时长、费用和场地条件
     plan_text.py         生成人可读的时间、费用、物料和公开正文
-web/                     产品页 index.html 与开发测试台 testbench.html
+web/dist/                Vite 生成的产品页与开发测试台，挂载到 /app/
 scripts/                 start_db.sh / start_api.sh / ac_acceptance.py
 tests/                   纯逻辑单元测试
 ```
 
 ## 2. 起服务
+
+前端源码位于[前端目录](../前端/)。要从 API 端口提供页面，先在仓库根目录运行 `pnpm --dir 前端 install --frozen-lockfile` 和 `pnpm --dir 前端 build`。开发时也可以通过 [Vite 开发服务器](../README.md#前端开发与构建)访问页面。
 
 ```bash
 # 1) 数据库（PG17 免安装 zip，本机 55432 端口）
@@ -170,7 +172,6 @@ python -m pytest -q
 - 限流是单进程内存计数，多进程/多实例下不准。
 - 生成是进程内 asyncio 后台任务，API 进程重启会丢失进行中的生成（状态停在 running）。
 - 不做整份 PPT/PDF 版面解析、OCR、语音、视频、跨平台同步、实时地图订位、多人协作、并排版本对比。
-- 前端是测试台级别，不是产品 UI。
 
 ## 内网穿透（临时演示用）
 
