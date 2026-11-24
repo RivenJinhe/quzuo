@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timezone
 from uuid import UUID
 
-from httpx import TimeoutException
+from httpx import Response, TimeoutException
 from sqlalchemy import select
 
 from app.config import settings
@@ -28,6 +28,12 @@ class GenerationInputError(Exception):
 
 class ProviderResponseError(Exception):
     """模型服务拒绝或无法处理该请求。"""
+
+
+class ModelOutputError(Exception):
+    """模型已作答，但没有给出完整的方案对象。"""
+
+    meta: dict | None = None
 
 
 def _now():
@@ -178,18 +184,18 @@ def user_prompt(payload: dict) -> str:
 _STUB_META: dict = {"model": "stub/local", "usage": None, "elapsed_ms": 0}
 
 
-def _meta(model_id: str, data: dict, elapsed_ms: int) -> dict:
-    """从厂商响应里取用量。各家字段名略有差异，取不到就是 None，不猜。"""
-    u = data.get("usage") or {}
-    tokens_in = int(u.get("prompt_tokens") or u.get("input_tokens") or 0)
-    tokens_out = int(u.get("completion_tokens") or u.get("output_tokens") or 0)
+def _meta(model_id: str, usages: list[dict | None], started: float) -> dict:
+    """合计本次生成及格式重试的用量；任一响应缺少用量时总费用未知。"""
     usage = None
-    if u:
-        usage = {
-            "prompt_tokens": tokens_in,
-            "completion_tokens": tokens_out,
-            "total_tokens": int(u.get("total_tokens") or tokens_in + tokens_out),
-        }
+    if usages and all(usages):
+        usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        for u in usages:
+            tokens_in = int(u.get("prompt_tokens") or u.get("input_tokens") or 0)
+            tokens_out = int(u.get("completion_tokens") or u.get("output_tokens") or 0)
+            usage["prompt_tokens"] += tokens_in
+            usage["completion_tokens"] += tokens_out
+            usage["total_tokens"] += int(u.get("total_tokens") or tokens_in + tokens_out)
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
     return {"model": model_id, "usage": usage, "elapsed_ms": elapsed_ms}
 
 
@@ -250,20 +256,30 @@ def call_stub(payload: dict) -> tuple[dict, dict]:
     }, _STUB_META
 
 
-def _extract_json(text: str) -> dict:
-    t = (text or "").strip()
-    if t.startswith(chr(96) * 3):
-        parts = t.split(chr(96) * 3)
-        if len(parts) >= 2:
-            t = parts[1]
-        t = t.strip()
+def _extract_json(text: str | None) -> dict:
+    if not isinstance(text, str) or not text.strip():
+        raise ModelOutputError("模型返回的方案正文为空或不是文本")
+    t = text.strip()
+    if t.startswith("```"):
+        t = t[3:].removesuffix("```").strip()
         if t.lower().startswith("json"):
-            t = t[4:]
-    start = t.find("{")
-    end = t.rfind("}")
-    if start >= 0 and end > start:
-        t = t[start:end + 1]
-    return json.loads(t)
+            t = t[4:].strip()
+    # 兼容对象前后的说明文字，同时让数组和字符串按其本身的类型接受检查。
+    if not t.startswith(("{", "[", '"')):
+        start = t.find("{")
+        if start > 0:
+            t = t[start:]
+    try:
+        result, end = json.JSONDecoder().raw_decode(t)
+        # 允许附带说明或闭合的代码围栏，但不能把多个对象或损坏的 JSON 只取第一段。
+        tail = t[end:].lstrip()
+        if tail and (tail[0] in '{}[],:"' or "{" in tail or "}" in tail):
+            raise json.JSONDecodeError("Extra data", t, len(t) - len(tail))
+    except json.JSONDecodeError as exc:
+        raise ModelOutputError(f"模型返回的方案 JSON 格式有误（第 {exc.lineno} 行，第 {exc.colno} 列）") from exc
+    if not isinstance(result, dict):
+        raise ModelOutputError("模型返回的方案必须是一个 JSON 对象")
+    return result
 
 
 def _post_chat(url: str, key: str, body: dict):
@@ -273,52 +289,63 @@ def _post_chat(url: str, key: str, body: dict):
         return client.post(url, headers=headers, json=body)
 
 
-def call_openai_compatible(payload: dict, spec) -> tuple[dict, dict]:
+def _read_chat_reply(resp: Response) -> tuple[str | None, str | None, dict | None]:
+    """读取厂商响应；服务拒绝和协议错误不触发方案格式重试。"""
+    if resp.status_code >= 400:
+        raise ProviderResponseError("模型服务返回 HTTP %s，请重试" % resp.status_code)
+    try:
+        data = resp.json()
+        if (data.get("base_resp") or {}).get("status_code") not in (0, None):
+            raise ProviderResponseError("模型服务暂不可用，请重试")
+        choice = data["choices"][0]
+        finish_reason = choice.get("finish_reason")
+        message = choice["message"]
+        if finish_reason == "content_filter" or message.get("refusal"):
+            raise ProviderResponseError("模型服务拒绝生成该方案")
+        return message.get("content"), finish_reason, data.get("usage")
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError, AttributeError) as exc:
+        raise ProviderResponseError("模型服务返回了无法读取的响应，请重试") from exc
+
+
+def _call_chat_model(payload: dict, spec: providers.ModelSpec) -> tuple[dict, dict]:
     key = providers.api_key(spec)
     if not key:
         raise GenerationInputError("服务端未配置该模型密钥")
+    prompt = user_prompt(payload)
     body = {
         "model": spec.model,
         "messages": [
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt(payload)},
+            {"role": "user", "content": prompt},
         ],
-        "response_format": {"type": "json_object"},
         "temperature": 1 if spec.provider == "kimi" else 0.3,
-        "stream": False,
     }
+    if spec.kind == "minimax":
+        url = spec.base_url
+        body["max_tokens"] = 4000
+    else:
+        url = spec.base_url.rstrip("/") + "/chat/completions"
+        body.update(response_format={"type": "json_object"}, stream=False)
     started = time.perf_counter()
-    resp = _post_chat(spec.base_url.rstrip("/") + "/chat/completions", key, body)
-    elapsed_ms = int((time.perf_counter() - started) * 1000)
-    if resp.status_code >= 400:
-        raise ProviderResponseError("模型服务返回 HTTP %s，请重试" % resp.status_code)
-    data = resp.json()
-    return _extract_json(data["choices"][0]["message"]["content"]), _meta(spec.id, data, elapsed_ms)
-
-
-def call_minimax(payload: dict, spec) -> tuple[dict, dict]:
-    key = providers.api_key(spec)
-    if not key:
-        raise GenerationInputError("服务端未配置该模型密钥")
-    body = {
-        "model": spec.model,
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt(payload)},
-        ],
-        "temperature": 0.3,
-        "max_tokens": 4000,
-    }
-    started = time.perf_counter()
-    resp = _post_chat(spec.base_url, key, body)
-    elapsed_ms = int((time.perf_counter() - started) * 1000)
-    if resp.status_code >= 400:
-        raise ProviderResponseError("模型服务返回 HTTP %s，请重试" % resp.status_code)
-    data = resp.json()
-    br = data.get("base_resp") or {}
-    if br.get("status_code") not in (0, None):
-        raise ProviderResponseError("模型服务暂不可用，请重试")
-    return _extract_json(data["choices"][0]["message"]["content"]), _meta(spec.id, data, elapsed_ms)
+    usages = []
+    for attempt in (1, 2):
+        content, finish_reason, usage = _read_chat_reply(_post_chat(url, key, body))
+        usages.append(usage)
+        try:
+            if finish_reason == "length":
+                raise ModelOutputError("模型输出达到长度上限，方案未完整返回")
+            result = _extract_json(content)
+        except ModelOutputError as exc:
+            if attempt == 2:
+                exc.meta = _meta(spec.id, usages, started)
+                raise
+            log.warning("重新生成方案 model=%s reason=%s", spec.id, exc, exc_info=True)
+            body["messages"][-1]["content"] = (
+                f"{prompt}\n上次未能读取完整方案：{exc}。请精简描述，重新输出完整的 JSON 对象。"
+                "检查逗号、引号转义和括号，保留必要的材料引用。"
+            )
+            continue
+        return result, _meta(spec.id, usages, started)
 
 
 def generate(payload: dict, model_id: str | None = None) -> tuple[dict, dict]:
@@ -333,9 +360,7 @@ def generate(payload: dict, model_id: str | None = None) -> tuple[dict, dict]:
     ok, why = providers.availability(spec)
     if not ok:
         raise GenerationInputError(why)
-    if spec.kind == "minimax":
-        return call_minimax(payload, spec)
-    return call_openai_compatible(payload, spec)
+    return _call_chat_model(payload, spec)
 
 
 def _log(db, owner_id, conversation_id, generation_id, event, code=None, detail=None):
@@ -424,6 +449,11 @@ def _fail_generation(db, conv, gen: Generation, exc: Exception) -> None:
     elif isinstance(exc, TimeoutException):
         code, event, message = "UPSTREAM_TIMEOUT", "provider_timeout", "模型响应超时，请重试"
         detail = {"type": type(exc).__name__}
+    elif isinstance(exc, ModelOutputError):
+        code, event = "MODEL_OUTPUT_INVALID", "provider_error"
+        message = f"{exc}，已重试一次，请重新生成"
+        detail = {"message": message}
+        gen.usage = _usage_row(exc.meta, gen.model)
     elif isinstance(exc, ProviderResponseError):
         code, event, message = "UPSTREAM_ERROR", "provider_error", str(exc)
         detail = {"message": message}
@@ -501,7 +531,7 @@ def _run_generation(generation_id) -> None:
         gen.finished_at = _now()
         db.commit()
     except Exception as exc:  # noqa: BLE001
-        if not isinstance(exc, (GenerationInputError, ProviderResponseError)):
+        if exc.__cause__ is not None or not isinstance(exc, (GenerationInputError, ProviderResponseError)):
             log.exception("generation failed id=%s", generation_id)
         try:
             db.rollback()
