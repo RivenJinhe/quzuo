@@ -14,7 +14,7 @@ from app.db import begin_write, get_db
 from app.deps import require_readable, require_writable
 from app.models import Material, TrialUser
 from app.schemas import (
-    MaterialCreate, MaterialListOut, MaterialOut, MaterialUpdate,
+    MaterialBatchOut, MaterialCreate, MaterialListOut, MaterialOut, MaterialSummaryOut, MaterialUpdate,
     material_status, validate_material_content, validate_material_pages,
 )
 from app.services import extract as extractor
@@ -81,7 +81,7 @@ def list_materials(
     offset = _decode_cursor(cursor)
     rows = db.scalars(stmt.order_by(Material.updated_at.desc(), Material.id.desc()).offset(offset).limit(limit + 1)).all()
     has_more = len(rows) > limit
-    items = rows[:limit]
+    items = [MaterialSummaryOut.of(row) for row in rows[:limit]]
     return MaterialListOut(items=items, next_cursor=_encode_cursor(offset + limit) if has_more else None)
 
 
@@ -93,7 +93,7 @@ def list_topics(trial: TrialUser = Depends(require_readable), db: Session = Depe
     return {"items": [{"topic": t, "count": c} for t, c in rows]}
 
 
-@router.post("/batch", response_model=MaterialListOut)
+@router.post("/batch", response_model=MaterialBatchOut)
 def batch_get(payload: dict, trial: TrialUser = Depends(require_readable), db: Session = Depends(get_db)):
     ids = payload.get("ids") or []
     if not isinstance(ids, list) or len(ids) > 50:
@@ -107,7 +107,7 @@ def batch_get(payload: dict, trial: TrialUser = Depends(require_readable), db: S
     ).all()
     order = {u: i for i, u in enumerate(uids)}
     items = sorted(rows, key=lambda m: order.get(m.id, 0))
-    return MaterialListOut(items=items, next_cursor=None)
+    return MaterialBatchOut(items=items)
 
 
 @router.post("/extract")

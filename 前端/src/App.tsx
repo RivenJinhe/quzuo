@@ -7,10 +7,12 @@ import Arrange from './arrange/Arrange'
 import type { ArrangeLaunch, ArrangeMaterialChange } from './arrange/Arrange'
 import { Materials } from './materials/Collection'
 import { MaterialEditor } from './materials/MaterialEditor'
+import { BatchImport } from './materials/BatchImport'
 import { MaterialDropHint, useMaterialDrop, type MaterialDrop } from './materials/materialDrop'
 import { Plans, usePlans } from './plans/Plans'
 import { PlanDetail } from './plans/PlanDetail'
 import type { Account, Citation, Material, PublicPlan } from './types'
+import { getMaterial } from './materials/materials'
 import { TextDialog, type TextPreview } from './ui/Feedback'
 import { useToast, type Notify } from './ui/useToast'
 
@@ -72,7 +74,19 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
   const [selected, setSelected] = useState<string[]>([])
   const [materialCount, setMaterialCount] = useState(0)
   const [revision, setRevision] = useState(0)
-  const [editor, setEditor] = useState<{ material: Material | null; drop?: MaterialDrop } | null>(null)
+  const [editor, setEditor] = useState<{ material: Material | null; drop?: MaterialDrop; batch?: File[] } | null>(null)
+  const openEditor = async (material: Material | null) => {
+    if (!material) {
+      setEditor({ material: null })
+      return
+    }
+    try {
+      // 列表只带正文开头一段，编辑必须取详情，否则保存会把全文覆盖成摘要。
+      setEditor({ material: await getMaterial(material.id) })
+    } catch (err) {
+      toast(errorMessage(err) || '这份材料没读到，稍后再试', true)
+    }
+  }
   const [materialChange, setMaterialChange] = useState<ArrangeMaterialChange>()
   const [launch, setLaunch] = useState<ArrangeLaunch | null>(null)
   const [planId, setPlanId] = useState('')
@@ -84,6 +98,11 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
   const dragging = useMaterialDrop(!!account && screen !== 'auth' && !preview && !loggingOut, (drop) => {
     if (!editor && drop.kind === 'invalid') {
       toast(drop.message, true)
+      return
+    }
+    // 拖进来多个文件时不开单条编辑器，直接进批量导入。
+    if (drop.kind === 'files') {
+      setEditor({ material: null, batch: drop.files })
       return
     }
     setEditor({ material: editor?.material ?? null, drop })
@@ -224,7 +243,7 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
                   selectedIds={selected}
                   onSelectionChange={setSelected}
                   onSendToArrange={(ids) => startArrange({ kind: 'add', selectedIds: ids })}
-                  onEdit={(material) => setEditor({ material })}
+                  onEdit={openEditor}
                   onMaterialsDeleted={(ids) => setMaterialChange({ kind: 'deleted', ids })}
                   onMaterialsUpdated={(materials) => setMaterialChange({ kind: 'updated', materials })}
                   revision={revision}
@@ -239,7 +258,7 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
                   launch={launch}
                   onEnterArrange={() => navigate('arrange')}
                   onOpenPlans={() => navigate('plans')}
-                  onEditMaterial={(material) => setEditor({ material })}
+                  onEditMaterial={openEditor}
                   onSelectionChange={setSelected}
                   onShowCitation={showCitation}
                   materialChange={materialChange}
@@ -279,17 +298,29 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
         </main>
       </div>
       {dragging && !editor && <MaterialDropHint />}
-      {account && editor && (
+      {account && editor && !editor.batch && (
         <MaterialEditor
           key={editor.material?.id ?? 'new'}
           material={editor.material}
           drop={editor.drop}
           dragging={dragging}
+          onBatch={(files) => setEditor({ material: null, batch: files })}
           onClose={() => setEditor(null)}
           toast={toast}
           onSave={(material) => {
             setMaterialChange({ kind: 'saved', material })
             setRevision((v) => v + 1)
+          }}
+        />
+      )}
+      {account && editor?.batch && (
+        <BatchImport
+          files={editor.batch}
+          toast={toast}
+          onClose={() => setEditor(null)}
+          onDone={() => {
+            setRevision((value) => value + 1)
+            setEditor(null)
           }}
         />
       )}

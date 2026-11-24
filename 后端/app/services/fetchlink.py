@@ -26,7 +26,7 @@ from bs4 import BeautifulSoup
 from app.services import extract as extractor
 
 MAX_WEB_BYTES = 3 * 1024 * 1024
-MAX_CHARS = 60000
+MAX_CHARS = 2_000_000
 TIMEOUT = 5
 DOWNLOAD_TIMEOUT = 30
 MAX_REDIRECTS = 5

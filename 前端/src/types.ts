@@ -33,6 +33,8 @@ export interface Material {
   title: string
   topic: string
   excerpt: string
+  /** 正文字数。列表接口只给开头一段摘要，字数看这个字段。 */
+  chars?: number
   source_kind: 'web' | 'courseware' | 'manual'
   source_file: string | null
   source_url: string | null

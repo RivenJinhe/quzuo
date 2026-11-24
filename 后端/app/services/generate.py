@@ -15,7 +15,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.db import SessionLocal, begin_write
 from app.models import Citation, Conversation, Generation, GenerationLog, Material, new_uuid
-from app.services import diffgen, providers, validation as v
+from app.services import chunks, diffgen, providers, validation as v
 from app.services.plan_tool import SUBMIT_PLAN_NAME, SUBMIT_PLAN_TOOL, PlanSubmission
 
 log = logging.getLogger("qu.generate")
@@ -89,18 +89,30 @@ def build_payload(goal: str, task_type: str, materials: list[Material], conditio
         total += len(text)
     excerpt_note = None
     if total > cap:
-        # 超限不拦截：按顺序分配额度逐份截断，前面的材料优先保住，后面的让出空间
+        # 超限不拦截：按顺序分配额度。材料本身超额度时不再砍尾，
+        # 而是切段后挑与任务最相关的段落，保证关键信息不被截掉。
         left = cap
         remaining = len(materials)
+        query = goal + " " + json.dumps(conditions, ensure_ascii=False)
+        cut: list[str] = []
         for m in materials:
             key = str(m.id)
             text = kept[key]
             floor = 500 if remaining > 1 else 0
             share = max(left - floor * (remaining - 1), 0)
-            kept[key] = text[:min(share, len(text))]
+            if len(text) > share:
+                body, chunk_total, chunk_used = chunks.select(text, share, query)
+                kept[key] = body
+                if chunk_total > chunk_used and chunk_used:
+                    cut.append("《%s》%d 段里挑了 %d 段" % (m.title[:24], chunk_total, chunk_used))
             left -= len(kept[key])
             remaining -= 1
-        excerpt_note = "材料合计 %d 字，超过单次上限 %d 字，已截断后生成" % (total, cap)
+        excerpt_note = "材料合计 %d 字，超过单次上限 %d 字" % (total, cap)
+        if cut:
+            excerpt_note += "，已按相关度选段：" + "；".join(cut)
+        else:
+            excerpt_note += "，已截断后生成"
+        excerpt_note += "。没给到的部分不要引用。" 
     cond_text = json.dumps(conditions, ensure_ascii=False)
     if len(cond_text) > settings.max_conditions_codepoints:
         raise GenerationInputError("条件过长", "conditions")

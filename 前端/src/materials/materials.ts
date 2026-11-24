@@ -36,6 +36,10 @@ export async function getSelectedMaterials(
   return (await Promise.all(requests)).flatMap((page) => page.items)
 }
 
+export function getMaterial(id: string, signal?: AbortSignal): Promise<Material> {
+  return api('GET', '/materials/' + id, undefined, signal)
+}
+
 export function materialUrl(text?: string | null): string {
   if (!text) return ''
   try {

@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useState } from 'react'
 import { materialUrl } from './materials'
 
 export type MaterialInput = { kind: 'file'; file: File } | { kind: 'url'; url: string }
-export type MaterialDrop = MaterialInput | { kind: 'invalid'; message: string }
+export type MaterialDrop = MaterialInput | { kind: 'files'; files: File[] } | { kind: 'invalid'; message: string }
 
 function hasFileOrLink(data: DataTransfer) {
   return data.types.includes('Files') || data.types.includes('text/uri-list')
@@ -11,12 +11,11 @@ function hasFileOrLink(data: DataTransfer) {
 function readDrop(data: DataTransfer): MaterialDrop | null {
   const fileItems = Array.from(data.items).filter((item) => item.kind === 'file')
   if (fileItems.some((item) => item.webkitGetAsEntry?.()?.isDirectory)) {
-    return { kind: 'invalid', message: '请打开文件夹，拖入其中一个文件。' }
+    return { kind: 'invalid', message: '请打开文件夹，拖入其中的文件。' }
   }
-  if (data.files.length > 1 || fileItems.length > 1) {
-    return { kind: 'invalid', message: '一次可添加一个文件，请重新选择。' }
-  }
-  if (data.files[0]) return { kind: 'file', file: data.files[0] }
+  const files = Array.from(data.files)
+  if (files.length === 1) return { kind: 'file', file: files[0] }
+  if (files.length > 1) return { kind: 'files', files }
 
   const links = data.getData('text/uri-list').split(/\r?\n/)
     .map((line) => line.trim()).filter((line) => line && !line.startsWith('#'))

@@ -34,12 +34,13 @@ interface MaterialEditorProps {
   material: Material | null
   drop?: MaterialDrop
   dragging: boolean
+  onBatch: (files: File[]) => void
   onClose: () => void
   onSave: (material: Material) => void
   toast: (message: string, isError?: boolean) => void
 }
 
-export function MaterialEditor({ material, drop, dragging, onClose, onSave, toast }: MaterialEditorProps) {
+export function MaterialEditor({ material, drop, dragging, onBatch, onClose, onSave, toast }: MaterialEditorProps) {
   const [fields, setFields] = useState(() => initialFields(material))
   const fieldsRef = useRef(fields)
   const [webRead, setWebRead] = useState<WebRead | null>(() =>
@@ -125,14 +126,14 @@ export function MaterialEditor({ material, drop, dragging, onClose, onSave, toas
       pageEnd: paged ? String(parsed.page_end) : '',
       fromFile: true,
     })
-    if (parsed) setFileMessage('已读取 ' + filename + (parsed.truncated ? '，保留前 6 万字。' : '。'))
+    if (parsed) setFileMessage('已读取 ' + filename + (parsed.truncated ? '，超出长度上限，已截断。' : '。'))
   }
 
   function showWebResult(url: string, result: WebExcerpt) {
     updateWebRead({
       key: url,
       result,
-      message: result.truncated ? '已读取正文，保留前 6 万字。' : '已读取网页正文。',
+      message: result.truncated ? '已读取正文（超出长度上限，已截断）。' : '已读取网页正文。',
     })
   }
 
@@ -244,7 +245,10 @@ export function MaterialEditor({ material, drop, dragging, onClose, onSave, toas
 
   const receiveDrop = useEffectEvent((input: MaterialDrop) => {
     if (input.kind === 'invalid') setError(input.message)
-    else void importMaterial(input)
+    else if (input.kind === 'files') {
+      if (input.files.length === 1) void importMaterial({ kind: 'file', file: input.files[0] })
+      else onBatch(input.files)
+    } else void importMaterial(input)
   })
   useEffect(() => {
     if (drop) receiveDrop(drop)
@@ -362,13 +366,15 @@ export function MaterialEditor({ material, drop, dragging, onClose, onSave, toas
                 type="file"
                 id="fFile"
                 ref={fileInput}
+                multiple
                 accept={fileTypes}
                 disabled={sourceLocked}
                 hidden
                 onChange={(event) => {
-                  const file = event.currentTarget.files?.[0]
+                  const picked = Array.from(event.currentTarget.files ?? [])
                   event.currentTarget.value = ''
-                  if (file) void importMaterial({ kind: 'file', file })
+                  if (picked.length === 1) void importMaterial({ kind: 'file', file: picked[0] })
+                  else if (picked.length > 1) onBatch(picked)
                 }}
               />
               <button
@@ -385,7 +391,7 @@ export function MaterialEditor({ material, drop, dragging, onClose, onSave, toas
               className="textarea"
               id="fExcerpt"
               ref={mainInput}
-              maxLength={60000}
+              maxLength={2000000}
               placeholder="拖入文件，或粘贴文字或网址"
               aria-describedby="materialFeedback materialStatus"
               disabled={sourceLocked}
@@ -439,7 +445,7 @@ export function MaterialEditor({ material, drop, dragging, onClose, onSave, toas
                 className="textarea"
                 id="fWebExcerpt"
                 ref={webInput}
-                maxLength={60000}
+                maxLength={2000000}
                 placeholder="粘贴希望助手参考的文字"
                 value={fields.webExcerpt}
                 disabled={sourceLocked}

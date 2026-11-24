@@ -2192,3 +2192,123 @@ details.more[open] summary:before {
   min-height: 300px;
   line-height: 1.85;
 }
+
+/* 批量导入材料面板 */
+.batch-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(21, 22, 15, .28);
+  z-index: 59;
+}
+.batch-drawer {
+  position: fixed;
+  inset: 0 0 0 auto;
+  width: min(620px, 100%);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  z-index: 60;
+}
+.batch-drawer .drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.batch-tip {
+  margin: 0;
+  padding: 10px 18px 2px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.batch-topic {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px 12px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line);
+}
+.batch-topic select {
+  flex: 0 0 180px;
+}
+.batch-rows {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.batch-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.batch-row.bad {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+.batch-file {
+  font-size: 12.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.batch-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.batch-meta .badge.bad {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.batch-meta .badge.ok {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.batch-fields {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.batch-fields .input {
+  flex: 1;
+  min-width: 0;
+}
+.batch-fields .select {
+  flex: 0 0 110px;
+}
+.batch-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+}
+.batch-progress {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 720px) {
+  .batch-drawer { width: 100%; }
+  .batch-foot { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+}

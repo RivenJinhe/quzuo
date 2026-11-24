@@ -11,7 +11,7 @@ from lxml.etree import XMLSyntaxError
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_PAGES = 300
-MAX_CHARS = 60000
+MAX_CHARS = 2_000_000
 
 TEXT_SUFFIXES = {".txt", ".md", ".markdown", ".csv"}
 

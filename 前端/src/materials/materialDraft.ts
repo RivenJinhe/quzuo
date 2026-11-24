@@ -53,7 +53,7 @@ export function mainLink(fields: EditorFields): string {
   return !fields.fromFile && /^(?:https?:\/\/|www\.)\S*$/i.test(input) ? input : ''
 }
 
-function inferTopic(text: string, hasPages: boolean): string {
+export function inferTopic(text: string, hasPages: boolean): string {
   let best = hasPages ? '复习' : '其他'
   let score = 0
   for (const [topic, pattern] of topicClues) {

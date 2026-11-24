@@ -51,7 +51,7 @@ def validate_material_pages(start: int | None, end: int | None) -> None:
 class MaterialCreate(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     topic: str = Field(min_length=1, max_length=40)
-    excerpt: str = Field(default="", max_length=60000)
+    excerpt: str = Field(default="", max_length=2000000)
     source_kind: SourceKind = "manual"
     source_url: str | None = Field(default=None, max_length=2000)
     source_file: str | None = Field(default=None, max_length=200)
@@ -72,7 +72,7 @@ class MaterialUpdate(BaseModel):
     version: int = Field(ge=1)
     title: str | None = Field(default=None, min_length=1, max_length=120)
     topic: str | None = Field(default=None, min_length=1, max_length=40)
-    excerpt: str | None = Field(default=None, max_length=60000)
+    excerpt: str | None = Field(default=None, max_length=2000000)
     source_kind: SourceKind | None = None
     source_url: str | None = Field(default=None, max_length=2000)
     source_file: str | None = Field(default=None, max_length=200)
@@ -106,9 +106,32 @@ class MaterialOut(CamelOut):
     updated_at: datetime
 
 
+SUMMARY_CHARS = 200
+
+
+class MaterialSummaryOut(MaterialOut):
+    """列表用的摘要：正文只给开头一段，全文只在详情与生成时取。"""
+
+    chars: int
+
+    @classmethod
+    def of(cls, material):
+        data = MaterialOut.model_validate(material).model_dump()
+        text = material.excerpt or ""
+        data["chars"] = len(text)
+        data["excerpt"] = text[:SUMMARY_CHARS]
+        return cls(**data)
+
+
 class MaterialListOut(BaseModel):
-    items: list[MaterialOut]
+    items: list[MaterialSummaryOut]
     next_cursor: str | None = None
+
+
+class MaterialBatchOut(BaseModel):
+    """按 ids 批量取材料：生成要用全文，这里不截断。"""
+
+    items: list[MaterialOut]
 
 
 # ---------- 对话 ----------
