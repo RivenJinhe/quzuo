@@ -1,10 +1,11 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { api, errorMessage } from '../api'
 import type { ExtractedMaterial, Material } from '../types'
 import { MaterialStatus } from './MaterialStatus'
 import { initialFields, mainLink, materialDraft } from './materialDraft'
 import type { EditorFields, WebExcerpt } from './materialDraft'
+import { MaterialDropHint, type MaterialDrop, type MaterialInput } from './materialDrop'
 import { materialUrl } from './materials'
 
 const notePrompts = new Map([
@@ -13,6 +14,13 @@ const notePrompts = new Map([
   ['活动', '适合多少人？'],
   ['其他', '你为什么想存这份材料？'],
 ])
+const fileTypes = '.pdf,.docx,.pptx,.md,.markdown,.txt,.csv'
+
+type LinkedMaterial = (WebExcerpt & { kind: 'web' }) | { kind: 'file'; file: ExtractedMaterial }
+
+function fetchMaterial(url: string, signal: AbortSignal) {
+  return api<LinkedMaterial>('POST', '/materials/fetch', { url }, signal)
+}
 
 interface WebRead {
   key: string
@@ -24,12 +32,14 @@ interface WebRead {
 
 interface MaterialEditorProps {
   material: Material | null
+  drop?: MaterialDrop
+  dragging: boolean
   onClose: () => void
   onSave: (material: Material) => void
   toast: (message: string, isError?: boolean) => void
 }
 
-export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEditorProps) {
+export function MaterialEditor({ material, drop, dragging, onClose, onSave, toast }: MaterialEditorProps) {
   const [fields, setFields] = useState(() => initialFields(material))
   const fieldsRef = useRef(fields)
   const [webRead, setWebRead] = useState<WebRead | null>(() =>
@@ -38,7 +48,7 @@ export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEdi
       : null,
   )
   const webReadRef = useRef(webRead)
-  const [fileLoading, setFileLoading] = useState(false)
+  const [importing, setImporting] = useState('')
   const [fileMessage, setFileMessage] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -49,7 +59,7 @@ export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEdi
   const mainInput = useRef<HTMLTextAreaElement>(null)
   const webInput = useRef<HTMLTextAreaElement>(null)
   const webTimer = useRef<number | undefined>(undefined)
-  const fileRequest = useRef<AbortController | null>(null)
+  const importRequest = useRef<AbortController | null>(null)
   const saveRequest = useRef<AbortController | null>(null)
 
   useLayoutEffect(() => {
@@ -60,7 +70,8 @@ export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEdi
     return () => {
       window.clearTimeout(webTimer.current)
       webReadRef.current?.controller?.abort()
-      fileRequest.current?.abort()
+      importRequest.current?.abort()
+      importRequest.current = null
       saveRequest.current?.abort()
       dialog.close()
     }
@@ -88,29 +99,71 @@ export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEdi
     updateWebRead(null)
   }
 
+  function replaceSource(changes: Partial<EditorFields>) {
+    clearWebRead()
+    updateFields({
+      content: '',
+      webExcerpt: '',
+      webExcerptEdited: false,
+      sourceUrl: '',
+      sourceFile: '',
+      pageStart: '',
+      pageEnd: '',
+      fromFile: false,
+      ...changes,
+    })
+    setFileMessage('')
+  }
+
+  function fillFile(filename: string, parsed?: ExtractedMaterial, url = '') {
+    const paged = parsed?.kind === 'pdf' || parsed?.kind === 'pptx'
+    replaceSource({
+      content: parsed?.excerpt ?? '',
+      sourceUrl: url,
+      sourceFile: filename.slice(0, 200),
+      pageStart: paged ? String(parsed.page_start) : '',
+      pageEnd: paged ? String(parsed.page_end) : '',
+      fromFile: true,
+    })
+    if (parsed) setFileMessage('已读取 ' + filename + (parsed.truncated ? '，保留前 6 万字。' : '。'))
+  }
+
+  function showWebResult(url: string, result: WebExcerpt) {
+    updateWebRead({
+      key: url,
+      result,
+      message: result.truncated ? '已读取正文，保留前 6 万字。' : '已读取网页正文。',
+    })
+  }
+
+  function showLinkFailure(url: string, failure: unknown) {
+    updateWebRead({
+      key: url,
+      message: `暂时读不到正文（${errorMessage(failure)}）。可以先保存网址或补充摘录。`,
+    })
+  }
+
   function readWeb(url: string): Promise<void> | undefined {
     if (url !== materialUrl(mainLink(fieldsRef.current))) return
     if (webReadRef.current?.key === url) return webReadRef.current.promise
 
     const controller = new AbortController()
-    const promise = api<WebExcerpt>('POST', '/materials/fetch', { url }, controller.signal)
+    const promise = fetchMaterial(url, controller.signal)
       .then((result) => {
         if (controller.signal.aborted || webReadRef.current?.controller !== controller) return
+        if (result.kind === 'file') {
+          if (fieldsRef.current.webExcerptEdited) updateWebRead({ key: url, message: '' })
+          else fillFile(result.file.source_file, result.file, url)
+          return
+        }
         if (!fieldsRef.current.webExcerptEdited) updateFields({ webExcerpt: result.text })
-        updateWebRead({
-          key: url,
-          result,
-          message: result.truncated ? '已读取正文，保留前 6 万字。' : '已读取网页正文。',
-        })
+        showWebResult(url, result)
       })
-      .catch(() => {
+      .catch((failure) => {
         if (controller.signal.aborted || webReadRef.current?.controller !== controller) return
-        updateWebRead({
-          key: url,
-          message: '暂时读不到网页正文。可以先保存网址，也可以补摘录。',
-        })
+        showLinkFailure(url, failure)
       })
-    updateWebRead({ key: url, controller, promise, message: '正在读取网页…' })
+    updateWebRead({ key: url, controller, promise, message: '正在读取链接…' })
     return promise
   }
 
@@ -127,52 +180,75 @@ export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEdi
     }
   }
 
-  async function readFile(file: File) {
-    if (saveRequest.current || fileRequest.current) return
-    if (file.size > 20 * 1024 * 1024) {
-      setError('文件超过 20 MB，请拆分后再选择。')
+  async function importMaterial(input: MaterialInput) {
+    if (saveRequest.current || importRequest.current) {
+      setError('请等当前操作完成，再添加材料。')
       return
     }
-    clearWebRead()
-    const controller = new AbortController()
-    fileRequest.current = controller
-    setError('')
-    setFileLoading(true)
-    setFileMessage('正在读取 ' + file.name + '…')
-    updateFields({
-      content: '',
-      webExcerpt: '',
-      webExcerptEdited: false,
-      sourceUrl: '',
-      sourceFile: file.name.slice(0, 200),
-      pageStart: '',
-      pageEnd: '',
-      fromFile: true,
-    })
-
-    const form = new FormData()
-    form.append('file', file)
-    try {
-      const parsed = await api<ExtractedMaterial>('POST', '/materials/extract', form, controller.signal)
-      if (controller.signal.aborted) return
-      if (parsed.kind === 'pdf' || parsed.kind === 'pptx') {
-        updateFields({
-          content: parsed.excerpt,
-          pageStart: String(parsed.page_start),
-          pageEnd: String(parsed.page_end),
-        })
-      } else {
-        updateFields({ content: parsed.excerpt })
+    if (input.kind === 'file') {
+      const { name, size } = input.file
+      if (size > 20 * 1024 * 1024) {
+        setError('文件超过 20 MB，请拆分后再选择。')
+        return
       }
-      setFileMessage('来源文件：' + file.name + (parsed.truncated ? ' · 保留前 6 万字' : ''))
+      if (!fileTypes.split(',').some((extension) => name.toLowerCase().endsWith(extension))) {
+        setError('请选择 PDF、DOCX、PPTX、TXT、Markdown 或 CSV 文件。')
+        return
+      }
+    }
+    const { content, webExcerpt, sourceUrl, sourceFile, pageStart, pageEnd } = fieldsRef.current
+    const replacing = [content, webExcerpt, sourceUrl, sourceFile, pageStart, pageEnd].some((value) => value.trim())
+    if (replacing && !window.confirm('替换当前材料的内容和来源？')) return
+
+    const controller = new AbortController()
+    importRequest.current = controller
+    setError('')
+    setImporting(input.kind === 'file' ? '正在读取 ' + input.file.name + '…' : '正在读取链接…')
+    try {
+      if (input.kind === 'file') {
+        const form = new FormData()
+        form.append('file', input.file)
+        const parsed = await api<ExtractedMaterial>('POST', '/materials/extract', form, controller.signal)
+        if (!controller.signal.aborted) {
+          setError('')
+          fillFile(parsed.source_file, parsed)
+        }
+        return
+      }
+
+      const result = await fetchMaterial(input.url, controller.signal)
+      if (controller.signal.aborted) return
+      setError('')
+      if (result.kind === 'file') fillFile(result.file.source_file, result.file, input.url)
+      else {
+        replaceSource({ content: input.url, webExcerpt: result.text })
+        showWebResult(input.url, result)
+      }
     } catch (failure) {
       if (controller.signal.aborted) return
-      setFileMessage('读不出 ' + file.name + ' 的文字。' + errorMessage(failure) + ' 可以手动补摘录。')
+      if (replacing) setError(errorMessage(failure) + ' 已保留原内容。')
+      else if (input.kind === 'file') {
+        fillFile(input.file.name)
+        setError(errorMessage(failure) + ' 可以手动补摘录。')
+      } else {
+        replaceSource({ content: input.url })
+        showLinkFailure(input.url, failure)
+      }
     } finally {
-      fileRequest.current = null
-      if (!controller.signal.aborted) setFileLoading(false)
+      if (importRequest.current === controller) {
+        importRequest.current = null
+        setImporting('')
+      }
     }
   }
+
+  const receiveDrop = useEffectEvent((input: MaterialDrop) => {
+    if (input.kind === 'invalid') setError(input.message)
+    else void importMaterial(input)
+  })
+  useEffect(() => {
+    if (drop) receiveDrop(drop)
+  }, [drop])
 
   function close() {
     if (saveRequest.current) return
@@ -194,7 +270,7 @@ export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEdi
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (saveRequest.current || fileRequest.current) return
+    if (saveRequest.current || importRequest.current) return
     const form = event.currentTarget
     const url = mainLink(fieldsRef.current)
     const draft = materialDraft(fieldsRef.current, material, webReadRef.current?.result)
@@ -250,7 +326,7 @@ export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEdi
   const currentWeb = webRead?.key === normalizedUrl ? webRead : null
   const draft = materialDraft(fields, material, currentWeb?.result)
   const body = draft.body
-  const sourceLocked = saving || fileLoading
+  const sourceLocked = saving || !!importing
   return (
     <dialog
       className="drawer"
@@ -286,13 +362,13 @@ export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEdi
                 type="file"
                 id="fFile"
                 ref={fileInput}
-                accept=".pdf,.docx,.pptx,.md,.markdown,.txt,.csv"
+                accept={fileTypes}
                 disabled={sourceLocked}
                 hidden
                 onChange={(event) => {
                   const file = event.currentTarget.files?.[0]
                   event.currentTarget.value = ''
-                  if (file) void readFile(file)
+                  if (file) void importMaterial({ kind: 'file', file })
                 }}
               />
               <button
@@ -310,17 +386,17 @@ export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEdi
               id="fExcerpt"
               ref={mainInput}
               maxLength={60000}
-              placeholder="粘贴文字或网址"
+              placeholder="拖入文件，或粘贴文字或网址"
               aria-describedby="materialFeedback materialStatus"
               disabled={sourceLocked}
               value={fields.content}
               onChange={(event) => changeContent(event.currentTarget.value)}
             />
             <div id="materialFeedback" className="material-feedback" role="status">
-              {error || currentWeb?.message || fileMessage}
+              {error || importing || currentWeb?.message || fileMessage}
             </div>
             <div id="materialStatus" className="material-feedback">
-              {!fileLoading && !draft.invalidUrl && (body.excerpt || body.source_url || body.source_file) && (
+              {!importing && !draft.invalidUrl && (body.excerpt || body.source_url || body.source_file) && (
                 <MaterialStatus status={body.status} />
               )}
             </div>
@@ -329,7 +405,7 @@ export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEdi
               type="button"
               id="addWebExcerpt"
               hidden={!normalizedUrl}
-              disabled={saving}
+              disabled={sourceLocked}
               onClick={() => {
                 revealMore()
                 webInput.current?.focus()
@@ -366,7 +442,7 @@ export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEdi
                 maxLength={60000}
                 placeholder="粘贴希望助手参考的文字"
                 value={fields.webExcerpt}
-                disabled={saving}
+                disabled={sourceLocked}
                 onChange={(event) => {
                   setError('')
                   updateFields({ webExcerpt: event.currentTarget.value, webExcerptEdited: true })
@@ -469,6 +545,7 @@ export function MaterialEditor({ material, onClose, onSave, toast }: MaterialEdi
           </button>
         </div>
       </form>
+      {dragging && <MaterialDropHint />}
     </dialog>
   )
 }

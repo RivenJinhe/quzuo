@@ -5,6 +5,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from zipfile import BadZipFile
+
+from lxml.etree import XMLSyntaxError
 
 MAX_BYTES = 20 * 1024 * 1024
 MAX_PAGES = 300
@@ -24,8 +27,13 @@ def _pages_pdf(data: bytes) -> list[str]:
     """逐页转 Markdown（pymupdf4llm 识别标题/表格；失败回退纯文本）。"""
     import pymupdf
 
-    doc = pymupdf.open(stream=data, filetype="pdf")
     try:
+        doc = pymupdf.open(stream=data, filetype="pdf")
+    except pymupdf.FileDataError as exc:
+        raise ExtractError("VALIDATION_ERROR", "PDF 文件损坏或无法读取") from exc
+    try:
+        if doc.needs_pass:
+            raise ExtractError("VALIDATION_ERROR", "请先用密码打开 PDF，另存为可读取的文件再导入")
         total = min(len(doc), MAX_PAGES)
         try:
             import pymupdf4llm
@@ -128,20 +136,23 @@ def extract(filename: str, data: bytes, page_start: int | None = None, page_end:
     if len(data) > MAX_BYTES:
         raise ExtractError("PAYLOAD_TOO_LARGE", "文件超过 20MB，请拆分后再传")
     suffix = Path(filename or "").suffix.lower()
-    if suffix in TEXT_SUFFIXES:
-        all_pages = _pages_text(data)
-        kind = "text"
-    elif suffix == ".pdf":
-        all_pages = _pages_pdf(data)
-        kind = "pdf"
-    elif suffix == ".docx":
-        all_pages = _pages_docx(data)
-        kind = "docx"
-    elif suffix == ".pptx":
-        all_pages = _pages_pptx(data)
-        kind = "pptx"
-    else:
-        raise ExtractError("UNSUPPORTED_FILE_TYPE", "只支持 txt/md/pdf/docx/pptx，其它格式请手动粘贴正文")
+    try:
+        if suffix in TEXT_SUFFIXES:
+            all_pages = _pages_text(data)
+            kind = "text"
+        elif suffix == ".pdf":
+            all_pages = _pages_pdf(data)
+            kind = "pdf"
+        elif suffix == ".docx":
+            all_pages = _pages_docx(data)
+            kind = "docx"
+        elif suffix == ".pptx":
+            all_pages = _pages_pptx(data)
+            kind = "pptx"
+        else:
+            raise ExtractError("UNSUPPORTED_FILE_TYPE", "只支持 PDF、DOCX、PPTX、TXT、Markdown 或 CSV 文件")
+    except (BadZipFile, XMLSyntaxError, KeyError, ValueError) as exc:
+        raise ExtractError("VALIDATION_ERROR", "文件已损坏或实际格式与文件名不符") from exc
     page_count = len(all_pages)
     if not page_count or not any((p or "").strip() for p in all_pages):
         raise ExtractError("UNSUPPORTED_FILE_TYPE", "文件里没有可提取的文字（可能是图片型文件）")

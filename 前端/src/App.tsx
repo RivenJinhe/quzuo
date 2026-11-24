@@ -7,6 +7,7 @@ import Arrange from './arrange/Arrange'
 import type { ArrangeLaunch, ArrangeMaterialChange } from './arrange/Arrange'
 import { Materials } from './materials/Collection'
 import { MaterialEditor } from './materials/MaterialEditor'
+import { MaterialDropHint, useMaterialDrop, type MaterialDrop } from './materials/materialDrop'
 import { Plans, usePlans } from './plans/Plans'
 import { PlanDetail } from './plans/PlanDetail'
 import type { Account, Citation, Material, PublicPlan } from './types'
@@ -71,7 +72,7 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
   const [selected, setSelected] = useState<string[]>([])
   const [materialCount, setMaterialCount] = useState(0)
   const [revision, setRevision] = useState(0)
-  const [editor, setEditor] = useState<Material | null | undefined>(undefined)
+  const [editor, setEditor] = useState<{ material: Material | null; drop?: MaterialDrop } | null>(null)
   const [materialChange, setMaterialChange] = useState<ArrangeMaterialChange>()
   const [launch, setLaunch] = useState<ArrangeLaunch | null>(null)
   const [planId, setPlanId] = useState('')
@@ -80,6 +81,13 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
   const [loggingOut, setLoggingOut] = useState(false)
   const main = useRef<HTMLElement>(null)
   const plans = usePlans(!!account)
+  const dragging = useMaterialDrop(!!account && screen !== 'auth' && !preview && !loggingOut, (drop) => {
+    if (!editor && drop.kind === 'invalid') {
+      toast(drop.message, true)
+      return
+    }
+    setEditor({ material: editor?.material ?? null, drop })
+  })
   useEffect(() => () => previewRequest.current?.abort(), [])
   useEffect(() => {
     main.current?.scrollTo(0, 0)
@@ -93,7 +101,7 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
     }
     previewRequest.current?.abort()
     setPreview(null)
-    setEditor(undefined)
+    setEditor(null)
     setScreen(next)
     if (next === 'plans') plans.refresh()
   }
@@ -216,7 +224,7 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
                   selectedIds={selected}
                   onSelectionChange={setSelected}
                   onSendToArrange={(ids) => startArrange({ kind: 'add', selectedIds: ids })}
-                  onEdit={setEditor}
+                  onEdit={(material) => setEditor({ material })}
                   onMaterialsDeleted={(ids) => setMaterialChange({ kind: 'deleted', ids })}
                   onMaterialsUpdated={(materials) => setMaterialChange({ kind: 'updated', materials })}
                   revision={revision}
@@ -231,7 +239,7 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
                   launch={launch}
                   onEnterArrange={() => navigate('arrange')}
                   onOpenPlans={() => navigate('plans')}
-                  onEditMaterial={setEditor}
+                  onEditMaterial={(material) => setEditor({ material })}
                   onSelectionChange={setSelected}
                   onShowCitation={showCitation}
                   materialChange={materialChange}
@@ -270,11 +278,14 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
           )}
         </main>
       </div>
-      {account && editor !== undefined && (
+      {dragging && !editor && <MaterialDropHint />}
+      {account && editor && (
         <MaterialEditor
-          key={editor?.id ?? 'new'}
-          material={editor}
-          onClose={() => setEditor(undefined)}
+          key={editor.material?.id ?? 'new'}
+          material={editor.material}
+          drop={editor.drop}
+          dragging={dragging}
+          onClose={() => setEditor(null)}
           toast={toast}
           onSave={(material) => {
             setMaterialChange({ kind: 'saved', material })

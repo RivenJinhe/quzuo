@@ -81,7 +81,7 @@ pgsql17_root/pgsql/bin/createdb.exe -h 127.0.0.1 -p 55432 -U qu -E UTF8 -T templ
 | GET | /materials/topics | 主题聚合 |
 | POST | /materials/batch | 批量取 |
 | POST | /materials/extract | 上传文件转 Markdown（不落库） |
-| POST | /materials/fetch | 尝试抓取网页正文，用户确认后保存 |
+| POST | /materials/fetch | 读取网页或公开文件直链的摘录，供用户确认 |
 | GET/PATCH/DELETE | /materials/{id} | 详情 / 改（version 乐观锁）/ 软删 |
 | POST | /conversations | 建对话并返回检索候选 |
 | GET | /conversations/{id} | 对话详情 |
@@ -107,10 +107,11 @@ pgsql17_root/pgsql/bin/createdb.exe -h 127.0.0.1 -p 55432 -U qu -E UTF8 -T templ
 
 错误体统一为 `{"error":{"code":"...","message":"..."}}`；常见码：VALIDATION_ERROR / NOT_FOUND / VERSION_CONFLICT / CONFLICT_REQUIREMENTS / SOURCE_INSUFFICIENT / STALE_GENERATION / RATE_LIMITED / TRIAL_EXPIRED(_READONLY)。
 
-## 5. 上传文件：先转 Markdown 再给模型
+## 5. 从文件与链接提取摘录
 
 - `POST /materials/extract`（multipart `file`，可选 `page_start`/`page_end`）把文件转成 Markdown 文本，**不落库**，前端拿回来填进材料表单的「摘录原文」。
-- 支持带文字的 PDF、DOCX、PPTX 及文本文件。单个上传文件最大 20 MB，PDF 和 PPTX 最多处理 300 页，正文最多保留 60000 字。
+- `POST /materials/fetch` 接受 JSON `{ "url": "…" }`。网页返回 `kind: "web"` 和正文，公开文件直链返回 `kind: "file"` 和 `file`，其中 `file` 使用上传提取的响应格式。请求只访问公网地址，按重定向逐跳校验连接目标，并限制下载用时和大小。
+- 支持带文字的 PDF、DOCX、PPTX 及 TXT、Markdown、CSV。单个文件最大 20 MB，PDF 和 PPTX 最多处理 300 页，正文最多保留 60000 字。
 - 多页时每页前置 `<!-- page N -->` 标记，保证生成方案时出处页码可回溯。
 - 只有链接时可以先存网址，补齐摘录后再作为引用依据。送模型的材料摘录合计默认上限为 40000 字。
 - 不做 OCR、不还原版式、不解析整份 PPT/PDF 的版面结构；图片型文件会返回「没有可提取的文字」。
