@@ -3,55 +3,103 @@ from unittest.mock import Mock
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from app.models import Generation
 from app.services import generate
 
 
 @pytest.fixture
-def run_model(monkeypatch):
+def post(monkeypatch):
+    transport = Mock()
+    monkeypatch.setattr(generate, "_post_chat", transport)
+    return transport
+
+
+@pytest.fixture
+def run_model(monkeypatch, post):
     """用内存中的厂商响应驱动生成逻辑。"""
     monkeypatch.setattr(generate.settings, "llm_allow_real", True)
     monkeypatch.setattr(generate.providers, "api_key", lambda spec: "test")
-    payload = {
-        "task_type": "review", "goal": "准备复习", "materials": [],
-        "conditions": {}, "retained": {}, "pending_facts": {},
-    }
 
-    def run(responses, model="deepseek/deepseek-chat"):
-        post = Mock(side_effect=responses)
-        monkeypatch.setattr(generate, "_post_chat", post)
-        return generate.generate(payload, model)
+    def run(responses, model="deepseek/deepseek-chat", previous=None):
+        post.side_effect = responses
+        return generate.generate({
+            "task_type": "review", "goal": "准备复习", "materials": [],
+            "conditions": {}, "retained": {}, "pending_facts": {}, "previous_result": previous,
+        }, model)
 
     return run
 
 
-def reply(content, reason="stop", tokens=1):
+PLAN = {
+    "task_type": "review", "headline": "课前复习",
+    "items": [{"title": "回顾", "minutes": 5, "detail": "解释代码标记",
+               "citations": [{"material_id": "notes", "excerpt": "用 ``` 标记代码"}]}],
+}
+
+
+def call(arguments=None, name="submit_plan"):
+    return {"type": "function", "function": {
+        "name": name, "arguments": json.dumps(PLAN) if arguments is None else arguments,
+    }}
+
+
+def reply(calls, reason="tool_calls", tokens=1, content=None):
     return httpx.Response(200, json={
-        "choices": [{"message": {"content": content}, "finish_reason": reason}],
+        "choices": [{"message": {"content": content, "tool_calls": calls}, "finish_reason": reason}],
         "usage": {"prompt_tokens": 2, "completion_tokens": tokens},
     })
 
 
-@pytest.mark.parametrize("model", ["deepseek/deepseek-chat", "minimax/MiniMax-M1"])
-def test_missing_comma_regenerates_and_counts_both_replies(run_model, model):
-    result, meta = run_model([
-        reply('{"headline":"复习" "items":[]}', tokens=6),
-        reply('{"headline":"复习","items":[]}', tokens=5),
-    ], model)
-    assert result == {"headline": "复习", "items": []}
-    assert meta["usage"] == {"prompt_tokens": 4, "completion_tokens": 11, "total_tokens": 15}
+@pytest.mark.parametrize(("model", "choice"), [
+    ("deepseek/deepseek-chat", {"type": "function", "function": {"name": "submit_plan"}}),
+    ("kimi/kimi-k2.6", "auto"),
+    ("qwen/qwen-plus", "auto"),
+    ("minimax/MiniMax-M1", "auto"),
+])
+def test_submission_uses_declared_tool_arguments(run_model, post, model, choice):
+    result, meta = run_model([reply([call()], content="其他说明")], model)
+    body = post.call_args.args[2]
+    tool, = body["tools"]
+    assert tool["type"] == "function"
+    assert tool["function"]["name"] == "submit_plan"
+    assert tool["function"]["parameters"]["type"] == "object"
+    assert body["tool_choice"] == choice
+    assert "response_format" not in body
+    assert result == PLAN
+    assert meta["usage"]["total_tokens"] == 3
 
 
-def test_truncated_reply_is_regenerated_even_if_it_looks_complete(run_model):
-    result, _ = run_model([reply('{"headline":"初稿"}', "length"), reply('{"headline":"完整方案"}')])
-    assert result == {"headline": "完整方案"}
+def test_revision_submits_new_plan_using_previous_context(run_model, post):
+    previous = {"body": "先复习第八页"}
+    result, _ = run_model([reply([call()])], previous=previous)
+    body = post.call_args.args[2]
+    assert previous["body"] in body["messages"][-1]["content"]
+    assert result == PLAN
 
 
-def test_two_invalid_replies_record_model_error_without_a_result(run_model):
+@pytest.mark.parametrize("first", [
+    reply(None, reason="stop", content=json.dumps(PLAN)),
+    reply([]),
+    reply([call(name="search_materials")]),
+    reply([call(), call()]),
+    reply([{"type": "function", "function": {"name": "submit_plan"}}]),
+    reply([call('{"headline":"复习" "items":[]}')]),
+    reply([call("[]")]),
+    reply([call(json.dumps({**PLAN, "items": "无"}))]),
+    reply([call()], reason="length"),
+])
+def test_invalid_submission_retries_once_and_counts_both_replies(run_model, first):
+    result, meta = run_model([first, reply([call()], tokens=5)])
+    assert result == PLAN
+    assert meta["usage"] == {"prompt_tokens": 4, "completion_tokens": 6, "total_tokens": 10}
+
+
+def test_two_invalid_submissions_record_error_without_a_result(run_model):
     with pytest.raises(generate.ModelOutputError) as raised:
-        run_model([reply(""), reply('{"items":[')])
-    assert isinstance(raised.value.__cause__, json.JSONDecodeError)
+        run_model([reply([]), reply([call('{"items":[')])])
+    assert isinstance(raised.value.__cause__, ValidationError)
 
     generation = Generation(model="deepseek/deepseek-chat")
     generate._fail_generation(Mock(), None, generation, raised.value)
@@ -61,18 +109,7 @@ def test_two_invalid_replies_record_model_error_without_a_result(run_model):
     assert generation.usage["total_tokens"] == 6
 
 
-@pytest.mark.parametrize("content", ['[{"items":[]}]', '{"items":[]}{"items":', None])
-def test_invalid_content_cannot_be_used_as_a_plan(content):
-    with pytest.raises(generate.ModelOutputError):
-        generate._extract_json(content)
-
-
-def test_fenced_plan_preserves_backticks_in_quoted_material(run_model):
-    result, meta = run_model([reply('```json\n{"excerpt":"用 ``` 标记代码"}\n```')])
-    assert result == {"excerpt": "用 ``` 标记代码"}
-    assert meta["usage"]["total_tokens"] == 3
-
-
-def test_provider_errors_do_not_trigger_format_retries(run_model):
+def test_provider_errors_do_not_trigger_format_retries(run_model, post):
     with pytest.raises(generate.ProviderResponseError, match="HTTP 429"):
         run_model([httpx.Response(429)])
+    assert post.call_count == 1

@@ -120,7 +120,7 @@ pgsql17_root/pgsql/bin/createdb.exe -h 127.0.0.1 -p 55432 -U qu -E UTF8 -T templ
 
 从[对话入口](app/routers/conversations.py)开始，首轮目标和后续修改共用[条件解析](app/services/turns.py)。[生成服务](app/services/generate.py)传入本次选择的材料、必要备注、用户条件及继续修改所需的上一版方案，关闭联网搜索。单次生成的引用使用当时的原文和页码。
 
-模型给出的候选进入[场景复核](app/services/validation.py)。页面显示最终结果与上一版的差异，保存时按[公开正文格式](app/services/plan_text.py)保留时间、物料、费用和待确认信息。[方案接口](app/routers/plans.py)负责保存、恢复和公开预览。
+模型通过一次 [`submit_plan` 工具调用](app/services/plan_tool.py)提交候选方案。服务端读取工具参数后进行[场景复核](app/services/validation.py)。缺少有效调用、参数格式错误或输出截断时，服务端会要求模型重新提交一次。页面显示最终结果与上一版的差异，保存时按[公开正文格式](app/services/plan_text.py)保留时间、物料、费用和待确认信息。[方案接口](app/routers/plans.py)负责保存、恢复和公开预览。
 
 | 校验 | 做什么 | 失败怎么处置 |
 | --- | --- | --- |

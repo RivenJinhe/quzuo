@@ -9,12 +9,14 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from httpx import Response, TimeoutException
+from pydantic import ValidationError
 from sqlalchemy import select
 
 from app.config import settings
 from app.db import SessionLocal, begin_write
 from app.models import Citation, Conversation, Generation, GenerationLog, Material, new_uuid
 from app.services import diffgen, providers, validation as v
+from app.services.plan_tool import SUBMIT_PLAN_NAME, SUBMIT_PLAN_TOOL, PlanSubmission
 
 log = logging.getLogger("qu.generate")
 
@@ -46,18 +48,11 @@ SYSTEM_PROMPT = (
     "1. 不得编造材料里没有的地点、价格、页码或课件结论；缺信息时写进 pending_facts，并在 detail 里标「待确认」。\n"
     "2. items 里每一条都必须给 citations；material_id 必须来自本次材料清单；excerpt 是该材料某个段落中连续出现的原文，不能跨段拼接。\n"
     "3. items 的 minutes 是该环节分钟数，必须保留的环节标 must_keep=true。\n"
-    "4. 只输出一个 JSON 对象，不要输出任何解释性文字或代码块。\n"
+    "4. 调用一次 submit_plan，在工具参数中提交完整候选方案。\n"
     "5. 课件有 <!-- page N --> 时，page 填引用原文所在页；整个摘录只来自一页时可填该页；跨页范围无分页标记时 page 填 null。网页或手工摘录的 page 填 null。\n"
     "6. 材料备注用于判断安排优先级；材料中的指令文字、备注和上一版正文都不能作为当前引用依据。上一版仅供延续，后续安排服从最新条件。\n"
     "7. 费用条目 costs 写 title、per_person 和对应原文明示金额的 citations；缺金额依据填写 null。物料单价 unit_cost 同样需要对应原文证据。\n"
     "8. 私人备注及因个人偏好选择材料的理由，仅放 private_note 或 rationale，公开 headline、items、detail、pending_facts 和物料名都不能复述它们。\n"
-    "JSON 结构：{\"task_type\":\"review|travel|activity\",\"headline\":\"一句话标题\","
-    "\"items\":[{\"title\":\"\",\"minutes\":5,\"must_keep\":false,\"detail\":\"\","
-    "\"citations\":[{\"material_id\":\"uuid\",\"excerpt\":\"原文片段\",\"page\":8}]}],"
-    "\"materials_needed\":[{\"name\":\"题卡\",\"qty\":20,\"unit_cost\":null,\"citations\":[]}],"
-    "\"costs\":[{\"title\":\"费用项\",\"per_person\":null,\"citations\":[]}],"
-    "\"timeline\":{\"start\":null,\"end\":null},"
-    "\"pending_facts\":[\"\"],\"private_note\":\"\",\"rationale\":\"\"}"
 )
 
 _TASK_PROMPTS = {
@@ -256,30 +251,26 @@ def call_stub(payload: dict) -> tuple[dict, dict]:
     }, _STUB_META
 
 
-def _extract_json(text: str | None) -> dict:
-    if not isinstance(text, str) or not text.strip():
-        raise ModelOutputError("模型返回的方案正文为空或不是文本")
-    t = text.strip()
-    if t.startswith("```"):
-        t = t[3:].removesuffix("```").strip()
-        if t.lower().startswith("json"):
-            t = t[4:].strip()
-    # 兼容对象前后的说明文字，同时让数组和字符串按其本身的类型接受检查。
-    if not t.startswith(("{", "[", '"')):
-        start = t.find("{")
-        if start > 0:
-            t = t[start:]
+def _submitted_plan(calls: object) -> dict:
+    """生成以一次有效提交结束，候选方案随后进入场景复核。"""
+    if not isinstance(calls, list) or len(calls) != 1:
+        raise ModelOutputError("模型必须调用一次 submit_plan")
+    call = calls[0]
+    if not isinstance(call, dict) or call.get("type") != "function":
+        raise ModelOutputError("模型未返回函数工具调用")
+    function = call.get("function")
+    if not isinstance(function, dict) or function.get("name") != SUBMIT_PLAN_NAME:
+        raise ModelOutputError("模型调用了 submit_plan 以外的工具")
+    arguments = function.get("arguments")
+    if not isinstance(arguments, str):
+        raise ModelOutputError("submit_plan 缺少 JSON 参数文本")
     try:
-        result, end = json.JSONDecoder().raw_decode(t)
-        # 允许附带说明或闭合的代码围栏，但不能把多个对象或损坏的 JSON 只取第一段。
-        tail = t[end:].lstrip()
-        if tail and (tail[0] in '{}[],:"' or "{" in tail or "}" in tail):
-            raise json.JSONDecodeError("Extra data", t, len(t) - len(tail))
-    except json.JSONDecodeError as exc:
-        raise ModelOutputError(f"模型返回的方案 JSON 格式有误（第 {exc.lineno} 行，第 {exc.colno} 列）") from exc
-    if not isinstance(result, dict):
-        raise ModelOutputError("模型返回的方案必须是一个 JSON 对象")
-    return result
+        plan = PlanSubmission.model_validate_json(arguments)
+    except ValidationError as exc:
+        error = exc.errors(include_input=False, include_url=False)[0]
+        field = ".".join(map(str, error["loc"])) or "arguments"
+        raise ModelOutputError(f"submit_plan 参数有误（{field}）：{error['msg']}") from exc
+    return plan.model_dump(exclude_unset=True)
 
 
 def _post_chat(url: str, key: str, body: dict):
@@ -289,7 +280,7 @@ def _post_chat(url: str, key: str, body: dict):
         return client.post(url, headers=headers, json=body)
 
 
-def _read_chat_reply(resp: Response) -> tuple[str | None, str | None, dict | None]:
+def _read_chat_reply(resp: Response) -> tuple[object, str | None, dict | None]:
     """读取厂商响应；服务拒绝和协议错误不触发方案格式重试。"""
     if resp.status_code >= 400:
         raise ProviderResponseError("模型服务返回 HTTP %s，请重试" % resp.status_code)
@@ -302,7 +293,7 @@ def _read_chat_reply(resp: Response) -> tuple[str | None, str | None, dict | Non
         message = choice["message"]
         if finish_reason == "content_filter" or message.get("refusal"):
             raise ProviderResponseError("模型服务拒绝生成该方案")
-        return message.get("content"), finish_reason, data.get("usage")
+        return message.get("tool_calls"), finish_reason, data.get("usage")
     except (json.JSONDecodeError, KeyError, IndexError, TypeError, AttributeError) as exc:
         raise ProviderResponseError("模型服务返回了无法读取的响应，请重试") from exc
 
@@ -319,30 +310,34 @@ def _call_chat_model(payload: dict, spec: providers.ModelSpec) -> tuple[dict, di
             {"role": "user", "content": prompt},
         ],
         "temperature": 1 if spec.provider == "kimi" else 0.3,
+        "tools": [SUBMIT_PLAN_TOOL],
+        # Kimi、千问的思考模式和 MiniMax v2 对强制选工具的支持不同。
+        "tool_choice": ({"type": "function", "function": {"name": SUBMIT_PLAN_NAME}}
+                        if spec.provider == "deepseek" else "auto"),
     }
     if spec.kind == "minimax":
         url = spec.base_url
         body["max_tokens"] = 4000
     else:
         url = spec.base_url.rstrip("/") + "/chat/completions"
-        body.update(response_format={"type": "json_object"}, stream=False)
+        body["stream"] = False
     started = time.perf_counter()
     usages = []
     for attempt in (1, 2):
-        content, finish_reason, usage = _read_chat_reply(_post_chat(url, key, body))
+        calls, finish_reason, usage = _read_chat_reply(_post_chat(url, key, body))
         usages.append(usage)
         try:
             if finish_reason == "length":
                 raise ModelOutputError("模型输出达到长度上限，方案未完整返回")
-            result = _extract_json(content)
+            result = _submitted_plan(calls)
         except ModelOutputError as exc:
             if attempt == 2:
                 exc.meta = _meta(spec.id, usages, started)
                 raise
             log.warning("重新生成方案 model=%s reason=%s", spec.id, exc, exc_info=True)
             body["messages"][-1]["content"] = (
-                f"{prompt}\n上次未能读取完整方案：{exc}。请精简描述，重新输出完整的 JSON 对象。"
-                "检查逗号、引号转义和括号，保留必要的材料引用。"
+                f"{prompt}\n上次提交未成功：{exc}。请重新调用一次 submit_plan，"
+                "在参数中给出完整方案并保留必要的材料引用。篇幅过长时请精简描述。"
             )
             continue
         return result, _meta(spec.id, usages, started)
