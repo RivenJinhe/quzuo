@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app import errors
-from app.db import get_db
+from app.db import begin_write, get_db
 from app.deps import require_readable, require_writable
 from app.models import Citation, Conversation, Generation, Material, Plan, TrialUser
 from app.schemas import ConversationOut, CopyOut, PlanIn, PlanListOut, PlanOut
@@ -23,6 +23,8 @@ def _now():
 
 
 def get_owned_plan(db: Session, trial: TrialUser, pid: uuid.UUID, *, lock: bool = False) -> Plan:
+    if lock:
+        begin_write(db)
     p = db.get(Plan, pid, with_for_update=lock, populate_existing=lock)
     if p is None or p.deleted_at is not None or p.owner_id != trial.id:
         raise errors.ApiError(404, errors.NOT_FOUND, "方案不存在")
@@ -52,6 +54,7 @@ def _citation_public(c: Citation) -> dict:
 def save_plan(payload: PlanIn, response: Response, trial: TrialUser = Depends(require_writable),
               db: Session = Depends(get_db)):
     """BE-250 / BE-251 保存：同一对话重复保存 = 更新原记录。"""
+    begin_write(db)
     conv = db.get(Conversation, payload.conversation_id, with_for_update=True, populate_existing=True)
     if conv is None or conv.deleted_at is not None or conv.owner_id != trial.id:
         raise errors.ApiError(404, errors.NOT_FOUND, "对话不存在")
@@ -130,6 +133,7 @@ def get_plan(pid: uuid.UUID, trial: TrialUser = Depends(require_readable), db: S
 @router.post("/{pid}/resume", response_model=ConversationOut)
 def resume_plan(pid: uuid.UUID, trial: TrialUser = Depends(require_writable), db: Session = Depends(get_db)):
     """从显式保存的版本恢复编辑条件，后来的未保存草稿不改变方案正文。"""
+    begin_write(db)
     plan = get_owned_plan(db, trial, pid)
     conv = db.get(Conversation, plan.conversation_id, with_for_update=True, populate_existing=True)
     if conv is None or conv.owner_id != trial.id or conv.deleted_at:

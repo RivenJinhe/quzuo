@@ -1,6 +1,6 @@
 # 去做后端
 
-FastAPI 与 PostgreSQL 为[网页首版](../README.md)提供收藏、选材、生成、修改和保存接口。产品要求以 [PRD v0.2.5](../交付物/PRD_v0.2.5.md) 为准。
+FastAPI 为[网页首版](../README.md)提供收藏、选材、生成、修改和保存接口，支持 SQLite 和 PostgreSQL。产品要求以 [PRD v0.2.5](../交付物/PRD_v0.2.5.md) 为准。
 
 ## 1. 目录
 
@@ -32,36 +32,34 @@ tests/                   纯逻辑单元测试
 
 前端源码位于[前端目录](../前端/)。要从 API 端口提供页面，先在仓库根目录运行 `pnpm --dir 前端 install --frozen-lockfile` 和 `pnpm --dir 前端 build`。开发时也可以通过 [Vite 开发服务器](../README.md#前端开发与构建)访问页面。
 
+按[快速开始](../README.md#快速开始后端)安装依赖并将 `.env.example` 复制为 `.env`，然后在 `后端` 目录启动 API。
+
 ```bash
-# 1) 数据库（PG17 免安装 zip，本机 55432 端口）
-cd F:/DSH工作区/去做/后端
-pgsql17_root/pgsql/bin/postgres.exe -D F:/qu_pg/data -p 55432
-
-# 2) API（0.0.0.0:8010）
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8010
-
-# 3) 打开
-#    本机 http://127.0.0.1:8010/app/
-#    同内网 http://<本机IP>:8010/app/
-#    接口文档 http://127.0.0.1:8010/docs
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
 ```
 
-首次建库（免安装 zip 在中文 Windows 上的 workaround）：
+样例中的 `QU_DATABASE_URL=sqlite:///./qu_dev.sqlite3` 会在 `后端` 目录创建 SQLite 文件，应用启动时初始化表。页面地址为 `http://127.0.0.1:8010/app/`，接口文档为 `http://127.0.0.1:8010/docs`。如果要用同一内网的其他设备访问，将 `--host` 改为 `0.0.0.0`，用 `http://<本机IP>:8010/app/` 打开页面。
+
+### 使用 PostgreSQL
+
+启动 PostgreSQL 并创建 UTF-8 数据库，将 `.env` 中的 `QU_DATABASE_URL` 改为实际连接串，例如 `postgresql+psycopg://qu:qu@127.0.0.1:55432/qu_dev`，再启动 API。沿用 Windows 便携版 PostgreSQL 时，可用 `scripts/start_db.sh` 启动已初始化的实例，并通过 `QU_PGDATA` 和 `QU_PGPORT` 指定数据目录及端口。
+
+如果 Windows 便携版 `initdb -E UTF8` 在导入本地化排序规则时遇到 `invalid byte sequence for encoding "UTF8"`，可以用 `SQL_ASCII` 初始化本机集群，再从 `template0` 创建 UTF-8 应用库。以下命令适用于原便携版目录，从 `后端` 运行。
 
 ```bash
 pgsql17_root/pgsql/bin/initdb.exe -D F:/qu_pg/data -U qu -E SQL_ASCII --locale=C --auth=trust
+bash scripts/start_db.sh
+# 保持数据库运行，在另一个终端创建应用库
 pgsql17_root/pgsql/bin/createdb.exe -h 127.0.0.1 -p 55432 -U qu -E UTF8 -T template0 qu_dev
 ```
 
-> 中文路径下 `initdb -E UTF8` 会报 `invalid byte sequence for encoding "UTF8": 0xb9`（post-bootstrap 导入本地化 collation 名）。
-> 集群用 SQL_ASCII 建、应用库用 UTF8 建，业务读写中文正常。
-> 连接串：`postgresql+psycopg://qu:qu@127.0.0.1:55432/qu_dev`。
+部署时可通过环境变量提供 `QU_DATABASE_URL`。[Docker Compose 配置](../docker-compose.yml)使用 PostgreSQL。
 
 ## 3. 配置（`.env`，前缀 QU_）
 
 | 键 | 默认 | 说明 |
 | --- | --- | --- |
-| QU_DATABASE_URL | 本机 qu_dev | 数据库连接串 |
+| QU_DATABASE_URL | 本机 PostgreSQL `qu_dev` | SQLite 或 PostgreSQL 连接串，`.env.example` 预填 SQLite |
 | QU_COOKIE_SECURE | false | 线上 HTTPS 时置 true |
 | QU_TRIAL_TTL_DAYS | 30 | 匿名试用有效期（天） |
 | QU_TRIAL_READONLY_DAYS | 30 | 到期后只读天数 |

@@ -1,17 +1,19 @@
 """对话与生成接口（BE-230 ~ BE-237）。"""
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
+from threading import Lock
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app import errors
 from app.services import providers
 from app.config import settings
-from app.db import get_db
+from app.db import begin_write, get_db
 from app.deps import require_readable, require_writable
 from app.models import Conversation, Generation, Material, Plan, TrialUser
 from app.schemas import (ConditionsUpdate, ConfirmMaterialsIn, ConversationCreate, ConversationOut,
@@ -24,6 +26,7 @@ from app.services.plan_text import public_body
 router = APIRouter(prefix="/api/v1", tags=["conversations"])
 
 _rate: dict[str, list[float]] = {}
+_rate_lock = Lock()
 _BASE_GENERATION_KEYS = ("base_generation_id", "base_generation_version")
 
 
@@ -40,14 +43,17 @@ def _rate_limit(owner_id, per_minute: int, count: int):
 
     key = str(owner_id)
     now = time.time()
-    bucket = [t for t in _rate.get(key, []) if now - t < 60]
-    if len(bucket) + count > per_minute:
-        raise errors.ApiError(429, errors.RATE_LIMITED, "生成太频繁，请稍后再试")
-    bucket.extend([now] * count)
-    _rate[key] = bucket
+    with _rate_lock:
+        bucket = [t for t in _rate.get(key, []) if now - t < 60]
+        if len(bucket) + count > per_minute:
+            raise errors.ApiError(429, errors.RATE_LIMITED, "生成太频繁，请稍后再试")
+        bucket.extend([now] * count)
+        _rate[key] = bucket
 
 
 def get_owned_conv(db: Session, trial: TrialUser, cid: uuid.UUID, *, lock: bool = False) -> Conversation:
+    if lock:
+        begin_write(db)
     conv = db.get(Conversation, cid, with_for_update=lock, populate_existing=lock)
     if conv is None or conv.deleted_at is not None or conv.owner_id != trial.id:
         raise errors.ApiError(404, errors.NOT_FOUND, "对话不存在")
@@ -290,8 +296,13 @@ def _previous_context(db: Session, conv: Conversation,
     }
 
 
+async def _run_generations(generation_ids: list[uuid.UUID]) -> None:
+    """在回复 202 后并行运行同一批模型。"""
+    await asyncio.gather(*(run_generation(generation_id) for generation_id in generation_ids))
+
+
 def _enqueue_generation(conv: Conversation, body: GenerationCreate, trial: TrialUser, db: Session,
-                        previous: Generation | None):
+                        previous: Generation | None, background_tasks: BackgroundTasks):
     cond = _merged_conditions(conv.task_type, conv.conditions, body.conditions)
     material_ids = list(dict.fromkeys(body.material_ids if body.material_ids is not None
                                      else conv.material_ids or []))
@@ -366,13 +377,7 @@ def _enqueue_generation(conv: Conversation, body: GenerationCreate, trial: Trial
         gens.append(gen)
     conv.status = "generating"
     db.commit()
-    for g in gens:
-        db.refresh(g)
-
-    import asyncio
-
-    for g in gens:
-        asyncio.create_task(run_generation(g.id))
+    background_tasks.add_task(_run_generations, [g.id for g in gens])
 
     if len(gens) == 1:
         g = gens[0]
@@ -399,18 +404,18 @@ def _enqueue_generation(conv: Conversation, body: GenerationCreate, trial: Trial
 
 
 @router.post("/conversations/{cid}/generations", status_code=202)
-async def create_generation(cid: uuid.UUID, body: GenerationCreate | None = None,
-                            trial: TrialUser = Depends(require_writable), db: Session = Depends(get_db)):
+def create_generation(cid: uuid.UUID, background_tasks: BackgroundTasks, body: GenerationCreate | None = None,
+                      trial: TrialUser = Depends(require_writable), db: Session = Depends(get_db)):
     """异步生成并返回轮询地址，支持同一批请求比较模型。"""
     conv = get_owned_conv(db, trial, cid, lock=True)
     previous = _prior_generation(db, conv)
     _supersede_pending(db, conv)
-    return _enqueue_generation(conv, body or GenerationCreate(), trial, db, previous)
+    return _enqueue_generation(conv, body or GenerationCreate(), trial, db, previous, background_tasks)
 
 
 @router.post("/conversations/{cid}/turns", status_code=202)
-async def add_turn(cid: uuid.UUID, payload: TurnIn,
-                   trial: TrialUser = Depends(require_writable), db: Session = Depends(get_db)):
+def add_turn(cid: uuid.UUID, payload: TurnIn, background_tasks: BackgroundTasks,
+             trial: TrialUser = Depends(require_writable), db: Session = Depends(get_db)):
     """BE-238 自然语言追问：一句话改条件，按最后一次输入重排。
 
     - 解析结果立刻写回对话（version+1），进行中的旧生成一律作废；
@@ -458,7 +463,8 @@ async def add_turn(cid: uuid.UUID, payload: TurnIn,
         return out
 
     try:
-        gen = _enqueue_generation(conv, GenerationCreate(model_ids=payload.model_ids), trial, db, previous)
+        gen = _enqueue_generation(conv, GenerationCreate(model_ids=payload.model_ids), trial, db, previous,
+                                  background_tasks)
     except errors.ApiError as exc:
         if exc.status not in (404, 409, 422, 429):
             raise

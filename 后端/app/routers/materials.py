@@ -10,7 +10,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app import errors
-from app.db import get_db
+from app.db import begin_write, get_db
 from app.deps import require_readable, require_writable
 from app.models import Material, TrialUser
 from app.schemas import (
@@ -38,6 +38,8 @@ def _decode_cursor(cursor: str | None) -> int:
 
 
 def get_owned(db: Session, trial: TrialUser, material_id: uuid.UUID, *, lock: bool = False) -> Material:
+    if lock:
+        begin_write(db)
     stmt = select(Material).where(
         Material.id == material_id, Material.owner_id == trial.id, Material.deleted_at.is_(None),
     )

@@ -41,7 +41,7 @@ pinned: false
 ```
 去做/
 ├── 前端/                  pnpm + React + TypeScript，Vite 构建产品页与接口测试台
-├── 后端/                  Python + FastAPI + PostgreSQL
+├── 后端/                  Python + FastAPI，支持 SQLite 和 PostgreSQL
 │   ├── app/               应用源码
 │   │   ├── routers/       路由：auth / materials / conversations / plans / models / citations
 │   │   ├── services/      模型提供商、生成编排、溯源
@@ -77,18 +77,27 @@ pnpm --dir 前端 dev
 
 ## 快速开始（后端）
 
-前置：Python 3.11+、PostgreSQL 14+
+Windows 用户可在仓库根目录打开 PowerShell，使用 Python 3.11+ 启动本地应用。首次从源码构建页面时，还需要上文所列的 Node.js 和 pnpm。
+
+```powershell
+.\start.ps1
+```
+
+脚本会准备后端虚拟环境，首次从样例创建 `后端/.env`，默认使用 SQLite。已有配置会继续生效。前端构建产物存在时直接复用，修改页面后可运行 `pnpm --dir 前端 build` 更新。打开 `http://127.0.0.1:8010/app/` 即可使用，按 Ctrl+C 停止。要更换端口，可执行 `.\start.ps1 -Port 8020`。
+
+手动启动时，在仓库根目录执行以下命令。
 
 ```bash
 cd 后端
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env      # 然后填你自己的 key
+cp .env.example .env
 ```
 
-在 `.env` 中设置 `QU_DATABASE_URL=postgresql+psycopg://用户:密码@127.0.0.1:5432/库名`。
+在 PowerShell 中，使用 `.\.venv\Scripts\Activate.ps1` 激活虚拟环境，使用 `Copy-Item .env.example .env` 复制配置。已有 `.env` 时，编辑其中的 `QU_DATABASE_URL` 即可切换数据库。
 
-建表是启动时自动完成的（`app/main.py` 里的 `Base.metadata.create_all`），不需要迁移脚本。
+复制的配置使用 `QU_DATABASE_URL=sqlite:///./qu_dev.sqlite3`。从 `后端` 目录启动后，应用会创建 `后端/qu_dev.sqlite3` 并初始化表。若使用 PostgreSQL，请先创建数据库，再按[后端说明](后端/README.md#使用-postgresql)设置连接串。
 
 ```bash
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
@@ -105,7 +114,7 @@ python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
 
 | 变量 | 说明 |
 |---|---|
-| `QU_DATABASE_URL` | PostgreSQL 连接串 |
+| `QU_DATABASE_URL` | SQLite 或 PostgreSQL 连接串，本地样例使用 SQLite 文件 |
 | `QU_PROVIDER_DEEPSEEK_KEY` | DeepSeek API Key |
 | `QU_PROVIDER_KIMI_KEY` | Kimi / Moonshot API Key |
 | `QU_PROVIDER_QWEN_KEY` | 通义千问 API Key |

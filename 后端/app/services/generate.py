@@ -1,6 +1,7 @@
 """从本次选材和用户条件生成方案，复核后保存结果及出处快照。"""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -11,7 +12,7 @@ from httpx import TimeoutException
 from sqlalchemy import select
 
 from app.config import settings
-from app.db import SessionLocal
+from app.db import SessionLocal, begin_write
 from app.models import Citation, Conversation, Generation, GenerationLog, Material, new_uuid
 from app.services import diffgen, providers, validation as v
 
@@ -400,6 +401,7 @@ def _selected_materials(db, gen: Generation) -> list[Material]:
 
 def _lock_generation(db, conversation_id, generation_id):
     # 与改条件、保存和取消使用同样的加锁顺序。
+    begin_write(db)
     conv = db.get(Conversation, conversation_id, with_for_update=True, populate_existing=True)
     gen = db.get(Generation, generation_id, with_for_update=True, populate_existing=True)
     return conv, gen
@@ -444,8 +446,10 @@ def _block_generation(db, gen: Generation, block: dict) -> None:
 
 
 async def run_generation(generation_id) -> None:
-    import asyncio
+    await asyncio.to_thread(_run_generation, generation_id)
 
+
+def _run_generation(generation_id) -> None:
     db = SessionLocal()
     conversation_id = None
     try:
@@ -478,7 +482,7 @@ async def run_generation(generation_id) -> None:
         db.commit()
         conflict = v.request_conflict(built)
         if conflict is None:
-            result, meta = await asyncio.to_thread(generate, built, model_id)
+            result, meta = generate(built, model_id)
 
         conv, gen = _lock_generation(db, conversation_id, generation_id)
         if gen is None or gen.status != "running":

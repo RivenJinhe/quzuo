@@ -12,6 +12,8 @@
 后端/pgsql17_root/
 后端/pgdata/
 后端/tools/
+后端/*.sqlite3
+后端/*.sqlite3-*
 *.exe
 *.zip
 *.tar.gz
