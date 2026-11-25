@@ -18,6 +18,9 @@ from app.security import hash_token
 
 COOKIE_MAX_AGE = 60 * 60 * 24 * 365  # 账号登录态保留一年，不必频繁重登
 
+# last_seen_at 目前只写不读，5 分钟一次足够；阈值放宽不会影响任何功能。
+_TOUCH_EVERY = timedelta(minutes=5)
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -33,7 +36,8 @@ def get_trial(
         raise errors.ApiError(401, errors.UNAUTHENTICATED, "请先注册或登录")
 
     h = hash_token(raw)
-    begin_write(db)
+    # 只读查询不要拿写锁：SQLite 下 BEGIN IMMEDIATE 会挡住别的写请求，
+    # 而这个依赖被每个请求调用一次，锁一旦跨整个请求持有，并发就掉下去了。
     tok = db.scalar(
         select(AuthToken).where(AuthToken.token_hash == h, AuthToken.revoked_at.is_(None))
     )
@@ -44,12 +48,15 @@ def get_trial(
     if trial is None:
         raise errors.ApiError(401, errors.UNAUTHENTICATED, "账号数据异常，请重新登录")
 
-        # last_seen 不必每次请求都写库：距上次超过 5 分钟才更新一次，
-    # 纯读操作不再触发写事务（SQLite 写是串行的，写少了并发才上得去）
+    # last_seen 不必每次请求都写库：距上次超过 5 分钟才更新一次，
+    # 纯读操作不再触发写事务（SQLite 写是串行的，写少了并发才上得去）；
+    # 真要写的时候，才把写锁拿进来。
     last_seen = tok.last_seen_at or tok.created_at
-    if _now() - last_seen > timedelta(minutes=5):
+    if _now() - last_seen > _TOUCH_EVERY:
+        begin_write(db)
         tok.last_seen_at = _now()
         db.commit()
+    return trial
 
 
 def set_session_cookie(response: Response, raw: str) -> None:

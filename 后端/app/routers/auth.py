@@ -26,17 +26,11 @@ _attempts: dict[str, list[float]] = defaultdict(list)
 
 def _login_rate_limit(ip: str) -> None:
     now = time.time()
-    # 顺手清理：很久没登录过的 IP，把它的记录整条删掉，防止字典越积越大
-    stale = [k for k, v in _attempts.items() if not v or now - v[-1] >= _LOGIN_WINDOW]
-    for k in stale:
-        del _attempts[k]
-
     arr = [t for t in _attempts[ip] if now - t < _LOGIN_WINDOW]
     if len(arr) >= _LOGIN_MAX:
         raise errors.ApiError(429, errors.RATE_LIMITED, "尝试太频繁，请稍后再试")
     arr.append(now)
     _attempts[ip] = arr
-
 
 
 def _extend_trial(trial: TrialUser) -> None:
