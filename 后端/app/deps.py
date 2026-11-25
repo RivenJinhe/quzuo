@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, Request, Response
 from sqlalchemy import select
@@ -44,9 +44,12 @@ def get_trial(
     if trial is None:
         raise errors.ApiError(401, errors.UNAUTHENTICATED, "账号数据异常，请重新登录")
 
-    tok.last_seen_at = _now()
-    db.commit()
-    return trial
+        # last_seen 不必每次请求都写库：距上次超过 5 分钟才更新一次，
+    # 纯读操作不再触发写事务（SQLite 写是串行的，写少了并发才上得去）
+    last_seen = tok.last_seen_at or tok.created_at
+    if _now() - last_seen > timedelta(minutes=5):
+        tok.last_seen_at = _now()
+        db.commit()
 
 
 def set_session_cookie(response: Response, raw: str) -> None:
