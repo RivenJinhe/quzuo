@@ -17,6 +17,7 @@ from app.db import SessionLocal, begin_write
 from app.models import Citation, Conversation, Generation, GenerationLog, Material, new_uuid
 from app.services import chunks, diffgen, providers, validation as v
 from app.services.plan_tool import SUBMIT_PLAN_NAME, SUBMIT_PLAN_TOOL, PlanSubmission
+from app.services.providers import post_chat as _post_chat
 
 log = logging.getLogger("qu.generate")
 
@@ -283,13 +284,6 @@ def _submitted_plan(calls: object) -> dict:
         field = ".".join(map(str, error["loc"])) or "arguments"
         raise ModelOutputError(f"submit_plan 参数有误（{field}）：{error['msg']}") from exc
     return plan.model_dump(exclude_unset=True)
-
-
-def _post_chat(url: str, key: str, body: dict):
-    import httpx
-    headers = {"Authorization": "Bearer %s" % key, "Content-Type": "application/json"}
-    with httpx.Client(timeout=settings.llm_timeout_seconds) as client:
-        return client.post(url, headers=headers, json=body)
 
 
 def _read_chat_reply(resp: Response) -> tuple[object, str | None, dict | None]:

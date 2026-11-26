@@ -3,6 +3,7 @@ import { api, errorMessage } from './api'
 import { citationSource } from './format'
 import { Auth, Brand } from './account/Auth'
 import { getSession, logoutAccount } from './account/session'
+import { calendarToday, CalendarPanel } from './calendar/Calendar'
 import Arrange from './arrange/Arrange'
 import type { ArrangeLaunch, ArrangeMaterialChange } from './arrange/Arrange'
 import { Materials } from './materials/Collection'
@@ -16,11 +17,12 @@ import { getMaterial } from './materials/materials'
 import { TextDialog, type TextPreview } from './ui/Feedback'
 import { useToast, type Notify } from './ui/useToast'
 
-type Screen = 'collect' | 'arrange' | 'plans' | 'detail' | 'auth'
+type Screen = 'collect' | 'arrange' | 'plans' | 'detail' | 'calendar' | 'auth'
 const pages = [
   { id: 'collect', title: '我的收藏', short: '收藏', icon: '收' },
   { id: 'arrange', title: '做个安排', short: '安排', icon: '安' },
   { id: 'plans', title: '我的方案', short: '方案', icon: '案' },
+  { id: 'calendar', title: '日历', short: '日历', icon: '历' },
 ] as const
 
 export default function App() {
@@ -71,6 +73,7 @@ interface WorkspaceProps {
 /** Signed-in screens share selection and navigation. Changing account discards all private drafts. */
 function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
   const [screen, setScreen] = useState<Screen>(account ? 'collect' : 'auth')
+  const [calendarDay, setCalendarDay] = useState(calendarToday)
   const [selected, setSelected] = useState<string[]>([])
   const [materialCount, setMaterialCount] = useState(0)
   const [revision, setRevision] = useState(0)
@@ -95,7 +98,7 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
   const [loggingOut, setLoggingOut] = useState(false)
   const main = useRef<HTMLElement>(null)
   const plans = usePlans(!!account)
-  const dragging = useMaterialDrop(!!account && screen !== 'auth' && !preview && !loggingOut, (drop) => {
+  const dragging = useMaterialDrop(!!account && screen !== 'auth' && screen !== 'calendar' && !preview && !loggingOut, (drop) => {
     if (!editor && drop.kind === 'invalid') {
       toast(drop.message, true)
       return
@@ -193,9 +196,11 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
             >
               <i className="dot" />
               <span className="lbl">{page.title}</span>
-              <span className="count">
-                {page.id === 'collect' ? materialCount : page.id === 'plans' ? plans.plans.length : '0'}
-              </span>
+              {page.id !== 'calendar' && (
+                <span className="count">
+                  {page.id === 'collect' ? materialCount : page.id === 'plans' ? plans.plans.length : '0'}
+                </span>
+              )}
             </button>
           ))}
           <div className="sidebar-foot">
@@ -251,7 +256,20 @@ function Workspace({ account, checking, onAccount, toast }: WorkspaceProps) {
                   onOpenAccount={() => navigate('auth')}
                   toast={toast}
                 />
+                {screen === 'collect' && (
+                  <CalendarPanel
+                    home
+                    day={calendarDay}
+                    onDay={setCalendarDay}
+                    openCalendar={() => navigate('calendar')}
+                  />
+                )}
               </section>
+              {screen === 'calendar' && (
+                <section className="screen active" id="screen-calendar">
+                  <CalendarPanel day={calendarDay} onDay={setCalendarDay} />
+                </section>
+              )}
               <section className={sectionClass('arrange')} id="screen-arrange">
                 <Arrange
                   selectedIds={selected}

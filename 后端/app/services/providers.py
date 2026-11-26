@@ -2,7 +2,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from threading import Lock
+from time import monotonic
 
+import httpx
+
+from app import errors
 from app.config import settings
 
 
@@ -18,6 +23,9 @@ class ModelSpec:
     hidden: bool = False
 
 
+QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+
 CATALOG: list[ModelSpec] = [
     # 本地占位：仅内部自测（AC 脚本）使用，hidden=True 表示不出现在 /api/v1/models，用户不可选。
     ModelSpec("stub/local", "stub", "本地占位（不调用外部模型）", "stub", "", "stub", hidden=True),
@@ -28,18 +36,36 @@ CATALOG: list[ModelSpec] = [
     ModelSpec("kimi/kimi-k3", "kimi", "Kimi", "kimi-k3",
               "https://api.moonshot.cn/v1", "openai", "provider_kimi_key"),
     ModelSpec("qwen/qwen-plus", "qwen", "通义千问", "qwen-plus",
-              "https://dashscope.aliyuncs.com/compatible-mode/v1", "openai", "provider_qwen_key"),
+              QWEN_BASE_URL, "openai", "provider_qwen_key"),
     ModelSpec("qwen/qwen4-max", "qwen", "通义千问", "qwen4-max",
-              "https://dashscope.aliyuncs.com/compatible-mode/v1", "openai", "provider_qwen_key"),
+              QWEN_BASE_URL, "openai", "provider_qwen_key"),
     ModelSpec("minimax/MiniMax-M1", "minimax", "MiniMax", "MiniMax-M1",
               "https://api.minimax.chat/v1/text/chatcompletion_v2", "minimax", "provider_minimax_key"),
 ]
 
 BY_ID = {m.id: m for m in CATALOG}
 
+_rate: dict[tuple[str, str], list[float]] = {}
+_rate_lock = Lock()
+
+
+def rate_limit(scope: str, owner_id: str, per_minute: int, count: int = 1) -> None:
+    key = (scope, owner_id)
+    now = monotonic()
+    with _rate_lock:
+        recent = [stamp for stamp in _rate.get(key, []) if now - stamp < 60]
+        if len(recent) + count > per_minute:
+            raise errors.ApiError(429, errors.RATE_LIMITED, "生成太频繁，请稍后再试")
+        _rate[key] = [*recent, *([now] * count)]
+
 
 def api_key(spec: ModelSpec) -> str:
     return getattr(settings, spec.key_attr, "") if spec.key_attr else ""
+
+
+def post_chat(url: str, key: str, body: dict) -> httpx.Response:
+    with httpx.Client(timeout=settings.llm_timeout_seconds) as client:
+        return client.post(url, headers={"Authorization": f"Bearer {key}"}, json=body)
 
 
 def default_model_id() -> str:

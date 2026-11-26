@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import uuid
 from datetime import datetime, timezone
-from threading import Lock
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from sqlalchemy import select, update
@@ -25,8 +24,6 @@ from app.services.plan_text import public_body
 
 router = APIRouter(prefix="/api/v1", tags=["conversations"])
 
-_rate: dict[str, list[float]] = {}
-_rate_lock = Lock()
 _BASE_GENERATION_KEYS = ("base_generation_id", "base_generation_version")
 
 
@@ -39,16 +36,7 @@ def _material_limit() -> int:
 
 
 def _rate_limit(owner_id, per_minute: int, count: int):
-    import time
-
-    key = str(owner_id)
-    now = time.time()
-    with _rate_lock:
-        bucket = [t for t in _rate.get(key, []) if now - t < 60]
-        if len(bucket) + count > per_minute:
-            raise errors.ApiError(429, errors.RATE_LIMITED, "生成太频繁，请稍后再试")
-        bucket.extend([now] * count)
-        _rate[key] = bucket
+    providers.rate_limit("generation", str(owner_id), per_minute, count)
 
 
 def get_owned_conv(db: Session, trial: TrialUser, cid: uuid.UUID, *, lock: bool = False) -> Conversation:

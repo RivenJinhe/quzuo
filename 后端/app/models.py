@@ -2,15 +2,17 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time
 
 from sqlalchemy import (
     BigInteger,
+    Date,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
+    Time,
     Uuid,
     text,
 )
@@ -48,6 +50,25 @@ class TrialUser(Base):
     purge_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)     # 只读截止 / 之后 403
 
     __table_args__ = (Index("ix_trial_user_expires_at", "expires_at"),)
+
+
+class CalendarEvent(Base):
+    __tablename__ = "calendar_event"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=new_uuid)
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("trial_user.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    start_time: Mapped[time | None] = mapped_column(Time)
+    end_time: Mapped[time | None] = mapped_column(Time)
+    location: Mapped[str | None] = mapped_column(String(240))
+    notes: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+
+    __table_args__ = (Index("ix_calendar_event_owner_dates", "owner_id", "start_date", "end_date"),)
 
 
 class Material(Base):

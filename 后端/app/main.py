@@ -16,7 +16,7 @@ from app.db import begin_write, get_db, initialize_schema
 from app.deps import get_trial
 from app.models import TrialUser
 from app.services import providers
-from app.routers import auth, citations, conversations, materials, models, plans
+from app.routers import auth, calendar, citations, conversations, materials, models, plans
 
 logging.basicConfig(level=settings.log_level)
 
@@ -34,7 +34,7 @@ app.add_exception_handler(errors.ApiError, errors.api_error_handler)
 app.add_exception_handler(RequestValidationError, errors.validation_exception_handler)
 
 for r in (materials.router, conversations.router, plans.router, citations.router,
-          models.router, auth.router):
+          models.router, auth.router, calendar.router):
     app.include_router(r)
 
 

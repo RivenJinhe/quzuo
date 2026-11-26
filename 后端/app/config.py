@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     provider_kimi_key: str = ""
     provider_qwen_key: str = ""
     provider_minimax_key: str = ""
+    calendar_vision_model: str = "qwen3-vl-plus"
 
     # 限流与限额（BE-401 / BE-200）
     gen_rate_per_minute: int = 6

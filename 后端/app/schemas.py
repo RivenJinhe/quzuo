@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime, time
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
@@ -17,6 +17,72 @@ MaterialStatus = Literal["citable", "link_only", "unusable"]
 
 class CamelOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
+
+# ---------- 日历 ----------
+class CalendarEventIn(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    title: str = Field(min_length=1, max_length=160)
+    start_date: date
+    end_date: date | None = None
+    start_time: time | None = None
+    end_time: time | None = None
+    location: str | None = Field(default=None, max_length=240)
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def calendar_clock(cls, value: time | None) -> time | None:
+        if value is not None and (value.tzinfo or value.second or value.microsecond):
+            raise ValueError("时间请使用本地小时和分钟")
+        return value
+
+    @model_validator(mode="after")
+    def calendar_range(self):
+        end_date = self.end_date or self.start_date
+        if end_date < self.start_date:
+            raise ValueError("结束日期不能早于开始日期")
+        if self.end_time is not None and (
+            self.start_time is None or (end_date == self.start_date and self.end_time <= self.start_time)
+        ):
+            raise ValueError("请输入开始时间，同一天的结束时间须晚于开始时间")
+        return self
+
+
+class CalendarEventUpdate(CalendarEventIn):
+    version: int = Field(ge=1)
+
+
+class CalendarEventOut(CalendarEventIn, CamelOut):
+    id: uuid.UUID
+    end_date: date
+    version: int
+
+
+class CalendarImportEvent(CalendarEventIn):
+    previous_date: date | None = None
+    previous_time: time | None = None
+    previous_title: str | None = Field(default=None, min_length=1, max_length=160)
+
+    @field_validator("previous_time")
+    @classmethod
+    def previous_clock(cls, value: time | None) -> time | None:
+        return cls.calendar_clock(value)
+
+    @model_validator(mode="after")
+    def previous_event_has_date(self):
+        if self.previous_date is None and (self.previous_title is not None or self.previous_time is not None):
+            raise ValueError("修改已有日程时需要原日期")
+        return self
+
+
+class CalendarImportResult(BaseModel):
+    created: int
+    updated: int
+    unchanged: int
+    dates: list[date]
+    warnings: list[str]
 
 
 # ---------- 材料 ----------
